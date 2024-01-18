@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
+	"path"
 	"strconv"
 	"time"
 
@@ -131,38 +132,24 @@ func RootDAG(ctx context.Context, opts Options, mlmd *metadata.Client) (executio
 	}
 	// TODO(v2): in pipeline spec, rename GCS output directory to pipeline root.
 	pipelineRoot := opts.RuntimeConfig.GetGcsOutputDirectory()
-
-	restConfig, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize kubernetes client: %w", err)
-	}
-	k8sClient, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize kubernetes client set: %w", err)
-	}
-	cfg, err := config.FromConfigMap(ctx, k8sClient, opts.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	storeSessionInfo := objectstore.SessionInfo{}
+	pipelineBucketSessionInfo := objectstore.SessionInfo{}
 	if pipelineRoot != "" {
 		glog.Infof("PipelineRoot=%q", pipelineRoot)
 	} else {
 		pipelineRoot = cfg.DefaultPipelineRoot()
 		glog.Infof("PipelineRoot=%q from default config", pipelineRoot)
+		pipelineBucketSessionInfo, err = cfg.GetBucketSessionInfo()
+		if err != nil {
+			return nil, err
+		}
 	}
-	storeSessionInfo, err = cfg.GetStoreSessionInfo(pipelineRoot)
+	bucketSessionInfo, err := json.Marshal(pipelineBucketSessionInfo)
 	if err != nil {
 		return nil, err
 	}
-	storeSessionInfoJSON, err := json.Marshal(storeSessionInfo)
-	if err != nil {
-		return nil, err
-	}
-	storeSessionInfoStr := string(storeSessionInfoJSON)
+	bucketSessionInfoEntry := string(bucketSessionInfo)
 	// TODO(Bobgy): fill in run resource.
-	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, opts.Namespace, "run-resource", pipelineRoot, storeSessionInfoStr)
+	pipeline, err := mlmd.GetPipeline(ctx, opts.PipelineName, opts.RunID, opts.Namespace, "run-resource", pipelineRoot, bucketSessionInfoEntry)
 	if err != nil {
 		return nil, err
 	}

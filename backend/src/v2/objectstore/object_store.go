@@ -16,6 +16,7 @@ package objectstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -37,39 +38,46 @@ import (
 	"strings"
 )
 
-func OpenBucket(ctx context.Context, k8sClient kubernetes.Interface, namespace string, config *Config) (bucket *blob.Bucket, err error) {
+type Config struct {
+	Scheme      string
+	BucketName  string
+	Prefix      string
+	QueryString string
+}
+
+func OpenBucket(ctx context.Context, k8sClient kubernetes.Interface, namespace string, config *Config, bucketSessionInfo string) (bucket *blob.Bucket, err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("Failed to open bucket %q: %w", config.BucketName, err)
 		}
 	}()
-	if config.SessionInfo != nil {
-		if config.SessionInfo.Provider == "minio" || config.SessionInfo.Provider == "s3" {
-			sess, err1 := createS3BucketSession(ctx, namespace, config.SessionInfo, k8sClient)
-			if err1 != nil {
-				return nil, fmt.Errorf("Failed to retrieve credentials for bucket %s: %w", config.BucketName, err1)
-			}
-			if sess != nil {
-				openedBucket, err2 := s3blob.OpenBucket(ctx, sess, config.BucketName, nil)
-				if err2 != nil {
-					return nil, err2
-				}
-				// Directly calling s3blob.OpenBucket does not allow overriding prefix via bucketConfig.BucketURL().
-				// Therefore, we need to explicitly configure the prefixed bucket.
-				return blob.PrefixedBucket(openedBucket, config.Prefix), nil
-			}
-		} else if config.SessionInfo.Provider == "gs" {
-			client, err1 := getGCSTokenClient(ctx, namespace, config.SessionInfo, k8sClient)
-			if err1 != nil {
-				return nil, err1
-			}
-			if client != nil {
-				openedBucket, err2 := gcsblob.OpenBucket(ctx, client, config.BucketName, nil)
-				if err2 != nil {
-					return openedBucket, err2
-				}
-				return blob.PrefixedBucket(openedBucket, config.Prefix), nil
-			}
+	sess, err := createBucketSession(ctx, namespace, bucketSessionInfo, k8sClient)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to retrieve credentials for bucket %s: %w", config.BucketName, err)
+	}
+	if sess != nil {
+		openedBucket, err := s3blob.OpenBucket(ctx, sess, config.BucketName, nil)
+		if err != nil {
+			return nil, err
+		}
+		// Directly calling s3blob.OpenBucket does not allow overriding prefix via bucketConfig.BucketURL().
+		// Therefore, we need to explicitly configure the prefixed bucket.
+		return blob.PrefixedBucket(openedBucket, config.Prefix), nil
+
+	}
+	return blob.OpenBucket(ctx, config.bucketURL())
+}
+
+func (b *Config) bucketURL() string {
+	u := b.Scheme + b.BucketName
+
+	// append prefix=b.prefix to existing queryString
+	q := b.QueryString
+	if len(b.Prefix) > 0 {
+		if len(q) > 0 {
+			q = q + "&prefix=" + b.Prefix
+		} else {
+			q = "?prefix=" + b.Prefix
 		}
 	}
 
@@ -301,6 +309,72 @@ func getS3BucketCredential(
 		return nil, err
 	}
 	// The k8s secret "Key" for "SecretKey" and "AccessKey"
+	accessKey := string(secret.Data[bucketAccessKeyKey])
+	secretKey := string(secret.Data[bucketSecretKeyKey])
+
+	if accessKey != "" && secretKey != "" {
+		cred = credentials.NewStaticCredentials(accessKey, secretKey, "")
+		return cred, err
+	}
+	return nil, fmt.Errorf("could not find specified keys '%s' or '%s'", bucketAccessKeyKey, bucketSecretKeyKey)
+}
+
+type SessionInfo struct {
+	Region       string
+	Endpoint     string
+	DisableSSL   bool
+	SecretName   string
+	AccessKeyKey string
+	SecretKeyKey string
+}
+
+func createBucketSession(ctx context.Context, namespace string, sessionInfoJSON string, client kubernetes.Interface) (*session.Session, error) {
+	if sessionInfoJSON == "" {
+		return nil, nil
+	}
+	sessionInfo := &SessionInfo{}
+	err := json.Unmarshal([]byte(sessionInfoJSON), sessionInfo)
+	if err != nil {
+		return nil, fmt.Errorf("Encountered error when attempting to unmarshall bucket session properties: %w", err)
+	}
+	creds, err := getBucketCredential(ctx, client, namespace, sessionInfo.SecretName, sessionInfo.SecretKeyKey, sessionInfo.AccessKeyKey)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := session.NewSession(&aws.Config{
+		Credentials:      creds,
+		Region:           aws.String(sessionInfo.Region),
+		Endpoint:         aws.String(sessionInfo.Endpoint),
+		DisableSSL:       aws.Bool(sessionInfo.DisableSSL),
+		S3ForcePathStyle: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create session to access minio: %v", err)
+	}
+	return sess, nil
+}
+
+func getBucketCredential(
+	ctx context.Context,
+	clientSet kubernetes.Interface,
+	namespace string,
+	secretName string,
+	bucketSecretKeyKey string,
+	bucketAccessKeyKey string,
+) (cred *credentials.Credentials, err error) {
+	defer func() {
+		if err != nil {
+			// wrap error before returning
+			err = fmt.Errorf("Failed to get Bucket credentials from secret name=%q namespace=%q: %w", secretName, namespace, err)
+		}
+	}()
+	secret, err := clientSet.CoreV1().Secrets(namespace).Get(
+		ctx,
+		secretName,
+		metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
 	accessKey := string(secret.Data[bucketAccessKeyKey])
 	secretKey := string(secret.Data[bucketSecretKeyKey])
 

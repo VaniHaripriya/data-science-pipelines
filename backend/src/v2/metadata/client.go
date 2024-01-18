@@ -80,7 +80,7 @@ var (
 )
 
 type ClientInterface interface {
-	GetPipeline(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot, storeSessionInfo string) (*Pipeline, error)
+	GetPipeline(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot, bucketSessionInfo string) (*Pipeline, error)
 	GetDAG(ctx context.Context, executionID int64) (*DAG, error)
 	PublishExecution(ctx context.Context, execution *Execution, outputParameters map[string]*structpb.Value, outputArtifacts []*OutputArtifact, state pb.Execution_State) error
 	CreateExecution(ctx context.Context, pipeline *Pipeline, config *ExecutionConfig) (*Execution, error)
@@ -203,16 +203,16 @@ func (p *Pipeline) GetCtxID() int64 {
 	return p.pipelineCtx.GetId()
 }
 
-func (p *Pipeline) GetStoreSessionInfo() string {
+func (p *Pipeline) GetPipelineBucketSession() string {
 	if p == nil {
 		return ""
 	}
 	props := p.pipelineRunCtx.GetCustomProperties()
-	storeSessionInfo, ok := props[keyStoreSessionInfo]
+	bucketSessionInfo, ok := props[keySessionInfoDetails]
 	if !ok {
 		return ""
 	}
-	return storeSessionInfo.GetStringValue()
+	return bucketSessionInfo.GetStringValue()
 }
 
 func (p *Pipeline) GetPipelineRoot() string {
@@ -297,7 +297,7 @@ func GenerateOutputURI(pipelineRoot string, paths []string, preserveQueryString 
 
 // GetPipeline returns the current pipeline represented by the specified
 // pipeline name and run ID.
-func (c *Client) GetPipeline(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot, storeSessionInfo string) (*Pipeline, error) {
+func (c *Client) GetPipeline(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot, bucketSessionInfo string) (*Pipeline, error) {
 	pipelineContext, err := c.getOrInsertContext(ctx, pipelineName, pipelineContextType, nil)
 	if err != nil {
 		return nil, err
@@ -307,8 +307,8 @@ func (c *Client) GetPipeline(ctx context.Context, pipelineName, runID, namespace
 		keyNamespace:    StringValue(namespace),
 		keyResourceName: StringValue(runResource),
 		// pipeline root of this run
-		keyPipelineRoot:     StringValue(GenerateOutputURI(pipelineRoot, []string{pipelineName, runID}, true)),
-		keyStoreSessionInfo: StringValue(storeSessionInfo),
+		keyPipelineRoot:       stringValue(strings.TrimRight(pipelineRoot, "/") + "/" + path.Join(pipelineName, runID)),
+		keySessionInfoDetails: stringValue(bucketSessionInfo),
 	}
 	runContext, err := c.getOrInsertContext(ctx, runID, pipelineRunContextType, metadata)
 	glog.Infof("Pipeline Run Context: %+v", runContext)
@@ -500,22 +500,22 @@ func (c *Client) PublishExecution(ctx context.Context, execution *Execution, out
 
 // metadata keys
 const (
-	keyDisplayName       = "display_name"
-	keyTaskName          = "task_name"
-	keyImage             = "image"
-	keyPodName           = "pod_name"
-	keyPodUID            = "pod_uid"
-	keyNamespace         = "namespace"
-	keyResourceName      = "resource_name"
-	keyPipelineRoot      = "pipeline_root"
-	keyStoreSessionInfo  = "store_session_info"
-	keyCacheFingerPrint  = "cache_fingerprint"
-	keyCachedExecutionID = "cached_execution_id"
-	keyInputs            = "inputs"
-	keyOutputs           = "outputs"
-	keyParentDagID       = "parent_dag_id" // Parent DAG Execution ID.
-	keyIterationIndex    = "iteration_index"
-	keyIterationCount    = "iteration_count"
+	keyDisplayName        = "display_name"
+	keyTaskName           = "task_name"
+	keyImage              = "image"
+	keyPodName            = "pod_name"
+	keyPodUID             = "pod_uid"
+	keyNamespace          = "namespace"
+	keyResourceName       = "resource_name"
+	keyPipelineRoot       = "pipeline_root"
+	keySessionInfoDetails = "bucket_session_info"
+	keyCacheFingerPrint   = "cache_fingerprint"
+	keyCachedExecutionID  = "cached_execution_id"
+	keyInputs             = "inputs"
+	keyOutputs            = "outputs"
+	keyParentDagID        = "parent_dag_id" // Parent DAG Execution ID.
+	keyIterationIndex     = "iteration_index"
+	keyIterationCount     = "iteration_count"
 )
 
 // CreateExecution creates a new MLMD execution under the specified Pipeline.
