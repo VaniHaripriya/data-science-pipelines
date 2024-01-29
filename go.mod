@@ -52,13 +52,10 @@ require (
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
 	google.golang.org/protobuf v1.32.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.27.2
-	k8s.io/apimachinery v0.27.3
-	k8s.io/client-go v0.27.2
-	k8s.io/code-generator v0.27.2
-	k8s.io/kubernetes v1.13.0
-	k8s.io/utils v0.0.0-20230505201702-9f6742963106 // indirect
-	knative.dev/pkg v0.0.0-20231011201526-df28feae6d34
+	k8s.io/api v0.24.17
+	k8s.io/apimachinery v0.24.17
+	k8s.io/client-go v0.24.3
+	k8s.io/code-generator v0.23.3
 	sigs.k8s.io/controller-runtime v0.11.1
 	sigs.k8s.io/yaml v1.3.0
 )
@@ -209,8 +206,6 @@ replace (
 	github.com/go-git/go-git/v5 => github.com/go-git/go-git/v5 v5.11.0
 	github.com/go-jose/go-jose/v3 => github.com/go-jose/go-jose/v3 v3.0.1
 	google.golang.org/grpc => google.golang.org/grpc v1.56.3
-	k8s.io/kubernetes => k8s.io/kubernetes v1.11.5
-	sigs.k8s.io/controller-tools => sigs.k8s.io/controller-tools v0.2.9
 )
 
 go 1.21
