@@ -32,6 +32,8 @@ __all__ = [
     'use_config_map_as_volume',
     'use_secret_as_env',
     'use_secret_as_volume',
+    'add_node_selector',
+    'set_image_pull_secrets'
 ]
 
 from kfp.kubernetes.config_map import use_config_map_as_env
@@ -50,3 +52,4 @@ from kfp.kubernetes.volume import add_ephemeral_volume
 from kfp.kubernetes.volume import CreatePVC
 from kfp.kubernetes.volume import DeletePVC
 from kfp.kubernetes.volume import mount_pvc
+from kfp.kubernetes.image import set_image_pull_secrets
