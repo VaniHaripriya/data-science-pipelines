@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
@@ -29,6 +28,7 @@ import (
 
 const (
 	volumeNameKFPLauncher   = "kfp-launcher"
+	volumeNameCABUndle      = "ca-bundle"
 	DefaultLauncherImage    = "gcr.io/ml-pipeline/kfp-launcher@sha256:80cf120abd125db84fa547640fd6386c4b2a26936e0c2b04a7d3634991a850a4"
 	LauncherImageEnvVar     = "V2_LAUNCHER_IMAGE"
 	DefaultDriverImage      = "gcr.io/ml-pipeline/kfp-driver@sha256:8e60086b04d92b657898a310ca9757631d58547e76bbbb8bfc376d654bef1707"
@@ -344,48 +344,22 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 			Env:     commonEnvs,
 		},
 	}
-	// Update pod metadata if it defined in the Kubernetes Spec
-	kubernetesConfigParam := c.wf.Spec.Arguments.GetParameterByName(argumentsKubernetesSpec + refName)
-
-	if kubernetesConfigParam != nil {
-		k8sExecCfg := &kubernetesplatform.KubernetesExecutorConfig{}
-		if err := jsonpb.UnmarshalString(string(*kubernetesConfigParam.Value), k8sExecCfg); err == nil {
-			extendPodMetadata(&executor.Metadata, k8sExecCfg)
-		}
-	}
-	caBundleCfgMapName := os.Getenv("EXECUTOR_CABUNDLE_CONFIGMAP_NAME")
-	caBundleCfgMapKey := os.Getenv("EXECUTOR_CABUNDLE_CONFIGMAP_KEY")
-	caBundleMountPath := os.Getenv("EXECUTOR_CABUNDLE_MOUNTPATH")
+	caBundleCfgMapName := os.Getenv("ARTIFACT_COPY_STEP_CABUNDLE_CONFIGMAP_NAME")
+	caBundleCfgMapKey := os.Getenv("ARTIFACT_COPY_STEP_CABUNDLE_CONFIGMAP_KEY")
+	caBundleMountPath := os.Getenv("ARTIFACT_COPY_STEP_CABUNDLE_MOUNTPATH")
 	if caBundleCfgMapName != "" && caBundleCfgMapKey != "" {
-		caFile := fmt.Sprintf("%s/%s", caBundleMountPath, caBundleCfgMapKey)
 		var certDirectories = []string{
 			caBundleMountPath,
 			"/etc/ssl/certs",
 			"/etc/pki/tls/certs",
 		}
-		// Add to REQUESTS_CA_BUNDLE for python request library.
-		executor.Container.Env = append(executor.Container.Env, k8score.EnvVar{
-			Name:  "REQUESTS_CA_BUNDLE",
-			Value: caFile,
-		})
-		// For AWS utilities like cli, and packages.
-		executor.Container.Env = append(executor.Container.Env, k8score.EnvVar{
-			Name:  "AWS_CA_BUNDLE",
-			Value: caFile,
-		})
-		// OpenSSL default cert file env variable.
-		// https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_default_verify_paths.html
-		executor.Container.Env = append(executor.Container.Env, k8score.EnvVar{
-			Name:  "SSL_CERT_FILE",
-			Value: caFile,
-		})
 		sslCertDir := strings.Join(certDirectories, ":")
 		executor.Container.Env = append(executor.Container.Env, k8score.EnvVar{
 			Name:  "SSL_CERT_DIR",
 			Value: sslCertDir,
 		})
 		volume := k8score.Volume{
-			Name: volumeNameCABundle,
+			Name: volumeNameCABUndle,
 			VolumeSource: k8score.VolumeSource{
 				ConfigMap: &k8score.ConfigMapVolumeSource{
 					LocalObjectReference: k8score.LocalObjectReference{
@@ -398,8 +372,8 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 		executor.Volumes = append(executor.Volumes, volume)
 
 		volumeMount := k8score.VolumeMount{
-			Name:      volumeNameCABundle,
-			MountPath: caFile,
+			Name:      volumeNameCABUndle,
+			MountPath: fmt.Sprintf("%s/%s", caBundleMountPath, caBundleCfgMapKey),
 			SubPath:   caBundleCfgMapKey,
 		}
 
