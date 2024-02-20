@@ -28,24 +28,21 @@ import (
 )
 
 const (
-	volumeNameKFPLauncher    = "kfp-launcher"
-	volumeNameCABundle       = "ca-bundle"
-	DefaultLauncherImage     = "gcr.io/ml-pipeline/kfp-launcher@sha256:bef55a344574a25c557256d7c66cb19edacfd2008d694e5b6bb5b612d59feae0"
-	LauncherImageEnvVar      = "V2_LAUNCHER_IMAGE"
-	DefaultDriverImage       = "gcr.io/ml-pipeline/kfp-driver@sha256:dc8b56a2eb071f30409828a8884d621092e68385af11a6c06aa9e9fbcfbb19de"
-	DriverImageEnvVar        = "V2_DRIVER_IMAGE"
-	gcsScratchLocation       = "/gcs"
-	gcsScratchName           = "gcs-scratch"
-	s3ScratchLocation        = "/s3"
-	s3ScratchName            = "s3-scratch"
-	minioScratchLocation     = "/minio"
-	minioScratchName         = "minio-scratch"
-	dotLocalScratchLocation  = "/.local"
-	dotLocalScratchName      = "dot-local-scratch"
-	dotCacheScratchLocation  = "/.cache"
-	dotCacheScratchName      = "dot-cache-scratch"
-	dotConfigScratchLocation = "/.config"
-	dotConfigScratchName     = "dot-config-scratch"
+	volumeNameKFPLauncher   = "kfp-launcher"
+	DefaultLauncherImage    = "gcr.io/ml-pipeline/kfp-launcher@sha256:80cf120abd125db84fa547640fd6386c4b2a26936e0c2b04a7d3634991a850a4"
+	LauncherImageEnvVar     = "V2_LAUNCHER_IMAGE"
+	DefaultDriverImage      = "gcr.io/ml-pipeline/kfp-driver@sha256:8e60086b04d92b657898a310ca9757631d58547e76bbbb8bfc376d654bef1707"
+	DriverImageEnvVar       = "V2_DRIVER_IMAGE"
+	gcsScratchLocation      = "/gcs"
+	gcsScratchName          = "gcs-scratch"
+	s3ScratchLocation       = "/s3"
+	s3ScratchName           = "s3-scratch"
+	minioScratchLocation    = "/minio"
+	minioScratchName        = "minio-scratch"
+	dotLocalScratchLocation = "/.local"
+	dotLocalScratchName     = "dot-local-scratch"
+	dotCacheScratchLocation = "/.cache"
+	dotCacheScratchName     = "dot-cache-scratch"
 )
 
 func (c *workflowCompiler) Container(name string, component *pipelinespec.ComponentSpec, container *pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec) error {
@@ -293,12 +290,6 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 					EmptyDir: &k8score.EmptyDirVolumeSource{},
 				},
 			},
-			{
-				Name: dotConfigScratchName,
-				VolumeSource: k8score.VolumeSource{
-					EmptyDir: &k8score.EmptyDirVolumeSource{},
-				},
-			},
 		},
 		InitContainers: []wfapi.UserContainer{{
 			Container: k8score.Container{
@@ -347,10 +338,6 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 				{
 					Name:      dotCacheScratchName,
 					MountPath: dotCacheScratchLocation,
-				},
-				{
-					Name:      dotConfigScratchName,
-					MountPath: dotConfigScratchLocation,
 				},
 			},
 			EnvFrom: []k8score.EnvFromSource{metadataEnvFrom},
