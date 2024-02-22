@@ -15,7 +15,6 @@
 __version__ = '1.3.0'
 
 __all__ = [
-    'add_ephemeral_volume',
     'add_node_selector',
     'add_pod_annotation',
     'add_pod_label',
@@ -48,9 +47,11 @@ from kfp.kubernetes.pod_metadata import add_pod_annotation
 from kfp.kubernetes.pod_metadata import add_pod_label
 from kfp.kubernetes.secret import use_secret_as_env
 from kfp.kubernetes.secret import use_secret_as_volume
+<<<<<<< HEAD
 from kfp.kubernetes.timeout import set_timeout
+=======
+>>>>>>> 2983a7d49 (feat(Backend + SDK): Update kfp backend and kubernetes sdk to support tolerations (#10471))
 from kfp.kubernetes.toleration import add_toleration
 from kfp.kubernetes.volume import CreatePVC
 from kfp.kubernetes.volume import DeletePVC
 from kfp.kubernetes.volume import mount_pvc
-from kfp.kubernetes.image import set_image_pull_secrets

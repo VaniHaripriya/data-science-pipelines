@@ -163,7 +163,6 @@ class TestTolerations:
                                 'secretAsVolume': [{
                                     'secretName': 'my-secret',
                                     'mountPath': '/mnt/my_vol',
-                                    'optional': False
                                 },],
                             },
                         }
