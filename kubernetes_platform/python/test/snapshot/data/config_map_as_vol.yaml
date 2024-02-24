@@ -32,7 +32,7 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef comp():\n    pass\n\n"
-        image: python:3.9
+        image: python:3.7
 pipelineInfo:
   name: my-pipeline
 root:
@@ -56,4 +56,3 @@ platforms:
           configMapAsVolume:
           - mountPath: /mnt/my_vol
             configMapName: my-cm
-            optional: False
