@@ -4,12 +4,7 @@ The Kubeflow Pipelines SDK kfp-kubernetes python library (part of the [Kubeflow 
 
 * [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
 * [PersistentVolumeClaims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims)
-* [ImagePullPolicies](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
-* [Ephemeral volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/)
-* [Node selectors](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector)
-* [Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
-* [Labels and annotations](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/object-meta/#ObjectMeta)
-* and more
+* [ImagePullPolicy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
 
 Be sure to check out the full [API Reference](https://kfp-kubernetes.readthedocs.io/) for more details.
 
@@ -190,29 +185,6 @@ def my_pipeline():
         pvc_name=pvc1.outputs['name']).after(task2)
 ```
 
-### PersistentVolumeClaim: Create PVC on-the-fly tied to your pod's lifecycle
-```python
-from kfp import dsl
-from kfp import kubernetes
-
-@dsl.component
-def make_data():
-    with open('/data/file.txt', 'w') as f:
-        f.write('my data')
-
-@dsl.pipeline
-def my_pipeline():
-    task1 = make_data()
-    # note that the created pvc will be autoamatically cleaned up once pod disappeared and cannot be shared between pods
-    kubernetes.add_ephemeral_volume(
-        task1,
-        volume_name="my-pvc",
-        mount_path="/data",
-        access_modes=['ReadWriteOnce'],
-        size='5Gi',
-    )
-```
-
 ### Pod Metadata: Add pod labels and annotations to the container pod's definition
 ```python
 from kfp import dsl
@@ -239,7 +211,7 @@ def my_pipeline():
     )
 ```
 
-### Kubernetes Field: Use Kubernetes Field Path as enviornment variable
+# Kubernetes Field: Use Kubernetes Field Path as enviornment variable
 ```python
 from kfp import dsl
 from kfp import kubernetes

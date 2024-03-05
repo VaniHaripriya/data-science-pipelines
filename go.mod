@@ -29,11 +29,9 @@ require (
 	github.com/jackc/pgx/v5 v5.4.2
 	github.com/jinzhu/gorm v1.9.1
 	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/kubeflow/kfp-tekton/tekton-catalog/pipeline-loops v0.0.0-20231127195001-a75d4b3711ff
-	github.com/kubeflow/kfp-tekton/tekton-catalog/tekton-exithandler v0.0.0-20231127195001-a75d4b3711ff
-	github.com/kubeflow/kfp-tekton/tekton-catalog/tekton-kfptask v0.0.0-20231127195001-a75d4b3711ff
-	github.com/kubeflow/pipelines/api v0.0.0-20231027040853-58ce09e07d03
-	github.com/kubeflow/pipelines/kubernetes_platform v0.0.0-20240725205754-d911c8b73b49
+	github.com/jinzhu/now v1.1.4 // indirect
+	github.com/kubeflow/pipelines/api v0.0.0-20230331215358-758c91f76784
+	github.com/kubeflow/pipelines/kubernetes_platform v0.0.0-20240305195700-19a24e3e99db
 	github.com/kubeflow/pipelines/third_party/ml-metadata v0.0.0-20230810215105-e1f0c010f800
 	github.com/lestrrat-go/strftime v1.0.4
 	github.com/mattn/go-sqlite3 v1.14.18
