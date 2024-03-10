@@ -152,8 +152,6 @@ spec:
         name: dot-local-scratch
       - mountPath: /.cache
         name: dot-cache-scratch
-      - mountPath: /.config
-        name: dot-config-scratch
     initContainers:
     - command:
       - launcher-v2
@@ -180,18 +178,16 @@ spec:
     volumes:
     - emptyDir: {}
       name: kfp-launcher
-    - emptyDir: {}
+    - emptyDir: { }
       name: gcs-scratch
-    - emptyDir: {}
+    - emptyDir: { }
       name: s3-scratch
-    - emptyDir: {}
+    - emptyDir: { }
       name: minio-scratch
-    - emptyDir: {}
+    - emptyDir: { }
       name: dot-local-scratch
-    - emptyDir: {}
+    - emptyDir: { }
       name: dot-cache-scratch
-    - emptyDir: {}
-      name: dot-config-scratch
   - dag:
       tasks:
       - arguments:
