@@ -793,6 +793,8 @@ type ConfigMapAsVolume struct {
 	ConfigMapName string `protobuf:"bytes,1,opt,name=config_map_name,json=configMapName,proto3" json:"config_map_name,omitempty"`
 	// Container path to mount the ConfigMap data.
 	MountPath string `protobuf:"bytes,2,opt,name=mount_path,json=mountPath,proto3" json:"mount_path,omitempty"`
+	// An optional boolean value indicating whether the ConfigMap must be defined.
+	Optional *bool `protobuf:"varint,3,opt,name=optional,proto3,oneof" json:"optional,omitempty"`
 }
 
 func (x *ConfigMapAsVolume) Reset() {
@@ -839,6 +841,13 @@ func (x *ConfigMapAsVolume) GetMountPath() string {
 		return x.MountPath
 	}
 	return ""
+}
+
+func (x *ConfigMapAsVolume) GetOptional() bool {
+	if x != nil && x.Optional != nil {
+		return *x.Optional
+	}
+	return false
 }
 
 type ConfigMapAsEnv struct {
@@ -1471,8 +1480,8 @@ func file_kubernetes_executor_config_proto_init() {
 			}
 		}
 	}
-	file_kubernetes_executor_config_proto_msgTypes[2].OneofWrappers = []interface{}{}
-	file_kubernetes_executor_config_proto_msgTypes[5].OneofWrappers = []interface{}{
+	file_kubernetes_executor_config_proto_msgTypes[1].OneofWrappers = []interface{}{}
+	file_kubernetes_executor_config_proto_msgTypes[4].OneofWrappers = []interface{}{
 		(*PvcMount_TaskOutputParameter)(nil),
 		(*PvcMount_Constant)(nil),
 		(*PvcMount_ComponentInputParameter)(nil),
@@ -1486,11 +1495,11 @@ func file_kubernetes_executor_config_proto_init() {
 		(*DeletePvc_Constant)(nil),
 		(*DeletePvc_ComponentInputParameter)(nil),
 	}
-	file_kubernetes_executor_config_proto_msgTypes[10].OneofWrappers = []interface{}{}
-	file_kubernetes_executor_config_proto_msgTypes[15].OneofWrappers = []interface{}{}
-	file_kubernetes_executor_config_proto_msgTypes[17].OneofWrappers = []interface{}{}
-	file_kubernetes_executor_config_proto_msgTypes[18].OneofWrappers = []interface{}{}
-	file_kubernetes_executor_config_proto_msgTypes[19].OneofWrappers = []interface{}{}
+<<<<<<< HEAD
+=======
+	file_kubernetes_executor_config_proto_msgTypes[9].OneofWrappers = []interface{}{}
+	file_kubernetes_executor_config_proto_msgTypes[13].OneofWrappers = []interface{}{}
+>>>>>>> 9253c7ad7 (fix(kubernetes_platform): Add optional field to SecretAsVolume and ConfigMapAsVolume. Fixes #10548 (#10549))
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
