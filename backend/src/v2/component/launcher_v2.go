@@ -155,17 +155,16 @@ func (l *LauncherV2) Execute(ctx context.Context) (err error) {
 		return err
 	}
 	fingerPrint := execution.FingerPrint()
-	storeSessionInfo, err := objectstore.GetSessionInfoFromString(execution.GetPipeline().GetStoreSessionInfo())
+	bucketSessionInfo, err := objectstore.GetSessionInfoFromString(execution.GetPipeline().GetPipelineBucketSession())
 	if err != nil {
 		return err
 	}
 	pipelineRoot := execution.GetPipeline().GetPipelineRoot()
-	bucketConfig, err := objectstore.ParseBucketConfig(pipelineRoot, storeSessionInfo)
+	bucketConfig, err := objectstore.ParseBucketConfig(pipelineRoot, bucketSessionInfo)
 	if err != nil {
 		return err
 	}
-	bucketSessionInfo := execution.GetPipeline().GetPipelineBucketSession()
-	bucket, err := objectstore.OpenBucket(ctx, l.k8sClient, l.options.Namespace, bucketConfig, bucketSessionInfo)
+	bucket, err := objectstore.OpenBucket(ctx, l.k8sClient, l.options.Namespace, bucketConfig)
 	if err != nil {
 		return err
 	}
@@ -539,16 +538,23 @@ func fetchNonDefaultBuckets(
 		}
 		// TODO: Support multiple artifacts someday, probably through the v2 engine.
 		artifact := artifactList.Artifacts[0]
-		// The artifact does not belong under the object store path for this run. Cases:
+		// The artifact does not belong under the s3 path for this run
+		// Reasons:
 		// 1. Artifact is cached from a different run, so it may still be in the default bucket, but under a different run id subpath
-		// 2. Artifact is imported from the same bucket, but from a different path (re-use the same session)
-		// 3. Artifact is imported from a different bucket, or obj store (default to using user env in this case)
+		// 2. Artifact is imported from a different bucket, or obj store
+		// a. If imported, artifact bucket can still be specified in kfp-launcher config (not implemented)
+		// b. If imported, artifact bucket can not be in kfp-launcher config, in this case, return no session and rely on env for aws config
 		if !strings.HasPrefix(artifact.Uri, defaultBucketConfig.PrefixedBucket()) {
 			nonDefaultBucketConfig, parseErr := objectstore.ParseBucketConfigForArtifactURI(artifact.Uri)
 			if parseErr != nil {
 				return nonDefaultBuckets, fmt.Errorf("failed to parse bucketConfig for output artifact %q with uri %q: %w", name, artifact.GetUri(), parseErr)
 			}
-			nonDefaultBucket, err := objectstore.OpenBucket(ctx, k8sClient, namespace, nonDefaultBucketConfig, "")
+			// If the run is cached, it will be in the same bucket but under a different path, re-use the default bucket
+			// session in this case.
+			if (nonDefaultBucketConfig.Scheme == defaultBucketConfig.Scheme) && (nonDefaultBucketConfig.BucketName == defaultBucketConfig.BucketName) {
+				nonDefaultBucketConfig.Session = defaultBucketConfig.Session
+			}
+			nonDefaultBucket, err := objectstore.OpenBucket(ctx, k8sClient, namespace, nonDefaultBucketConfig)
 			if err != nil {
 				return nonDefaultBuckets, fmt.Errorf("failed to open bucket for output artifact %q with uri %q: %w", name, artifact.GetUri(), err)
 			}
