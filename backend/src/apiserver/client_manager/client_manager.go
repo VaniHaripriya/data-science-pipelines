@@ -186,9 +186,9 @@ func (c *ClientManager) init() {
 	c.resourceReferenceStore = storage.NewResourceReferenceStore(db)
 	c.dBStatusStore = storage.NewDBStatusStore(db)
 	c.defaultExperimentStore = storage.NewDefaultExperimentStore(db)
-	glog.Info("Initializing Object store client...")
+	glog.Info("Initializing Minio client...")
 	c.objectStore = initMinioClient(common.GetDurationConfig(initConnectionTimeout))
-	glog.Info("Object store client initialized successfully")
+	glog.Info("Minio client initialized successfully")
 	// Use default value of client QPS (5) & burst (10) defined in
 	// k8s.io/client-go/rest/config.go#RESTClientFor
 	clientParams := util.ClientParameters{
