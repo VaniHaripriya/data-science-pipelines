@@ -43,6 +43,8 @@ const (
 	dotLocalScratchName     = "dot-local-scratch"
 	dotCacheScratchLocation = "/.cache"
 	dotCacheScratchName     = "dot-cache-scratch"
+	dotConfigScratchLocation = "/.config"
+	dotConfigScratchName     = "dot-config-scratch"
 )
 
 func (c *workflowCompiler) Container(name string, component *pipelinespec.ComponentSpec, container *pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec) error {
@@ -290,6 +292,12 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 					EmptyDir: &k8score.EmptyDirVolumeSource{},
 				},
 			},
+			{
+				Name: dotConfigScratchName,
+				VolumeSource: k8score.VolumeSource{
+					EmptyDir: &k8score.EmptyDirVolumeSource{},
+				},
+			},
 		},
 		InitContainers: []wfapi.UserContainer{{
 			Container: k8score.Container{
@@ -338,6 +346,10 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 				{
 					Name:      dotCacheScratchName,
 					MountPath: dotCacheScratchLocation,
+				},
+				{
+					Name:      dotConfigScratchName,
+					MountPath: dotConfigScratchLocation,
 				},
 			},
 			EnvFrom: []k8score.EnvFromSource{metadataEnvFrom},
