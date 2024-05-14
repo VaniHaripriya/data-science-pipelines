@@ -73,6 +73,9 @@ type Options struct {
 
 	// optional, allows to specify kubernetes-specific executor config
 	KubernetesExecutorConfig *kubernetesplatform.KubernetesExecutorConfig
+
+	// set to true if ml pipeline server is serving over tls
+	MLPipelineTLSEnabled bool
 }
 
 // Identifying information used for error messages
@@ -335,7 +338,7 @@ func Container(ctx context.Context, opts Options, mlmd *metadata.Client, cacheCl
 		return execution, nil
 	}
 
-	podSpec, err := initPodSpecPatch(opts.Container, opts.Component, executorInput, execution.ID, opts.PipelineName, opts.RunID)
+	podSpec, err := initPodSpecPatch(opts.Container, opts.Component, executorInput, execution.ID, opts.PipelineName, opts.RunID, opts.MLPipelineTLSEnabled)
 	if err != nil {
 		return execution, err
 	}
@@ -368,6 +371,7 @@ func initPodSpecPatch(
 	executionID int64,
 	pipelineName string,
 	runID string,
+	mlPipelineTLSEnabled bool,
 ) (*k8score.PodSpec, error) {
 	executorInputJSON, err := protojson.Marshal(executorInput)
 	if err != nil {
@@ -403,6 +407,8 @@ func initPodSpecPatch(
 		fmt.Sprintf("$(%s)", component.EnvMetadataHost),
 		"--mlmd_server_port",
 		fmt.Sprintf("$(%s)", component.EnvMetadataPort),
+		"--mlPipelineServiceTLSEnabled",
+		fmt.Sprintf("%v", mlPipelineTLSEnabled),
 		"--", // separater before user command and args
 	}
 	res := k8score.ResourceRequirements{
