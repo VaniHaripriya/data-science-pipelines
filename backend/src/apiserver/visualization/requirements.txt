@@ -39,7 +39,7 @@ cachetools==4.2.4
     # via
     #   apache-beam
     #   google-auth
-certifi==2023.7.22
+certifi==2024.7.4
     # via requests
 cffi==1.15.1
     # via argon2-cffi-bindings
