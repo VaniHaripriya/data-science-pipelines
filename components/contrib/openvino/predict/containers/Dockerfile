@@ -1,4 +1,4 @@
-FROM ubuntu:16.04 as DEV
+FROM ubuntu:xenial-20201014 as DEV
 RUN apt-get update && apt-get install -y \
             curl \
             ca-certificates \
@@ -49,7 +49,7 @@ RUN pip3 install cython numpy && mkdir ie_bridges/python/build && cd ie_bridges/
     cmake -DInferenceEngine_DIR=${DLDT_DIR}/inference-engine/build -DPYTHON_EXECUTABLE=`which python3` -DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.5m.so -DPYTHON_INCLUDE_DIR=/usr/include/python3.5m .. && \
     make -j4
 
-FROM ubuntu:16.04 as PROD
+FROM ubuntu:xenial-20201014 as PROD
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
             curl \
