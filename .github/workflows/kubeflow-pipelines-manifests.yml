@@ -1,4 +1,4 @@
-name: kubeflow pipelines manifests
+name: kubeflow pipelines manifests tests
 
 on:
   push:
