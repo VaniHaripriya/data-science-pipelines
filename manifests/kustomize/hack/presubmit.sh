@@ -22,8 +22,6 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)"
 TMP="$(mktemp -d)"
 
 pushd "${TMP}"
-
-
 # Reference: https://github.com/mikefarah/yq/releases/tag/3.4.1
 curl -s -LO "https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64"
 chmod +x yq_linux_amd64

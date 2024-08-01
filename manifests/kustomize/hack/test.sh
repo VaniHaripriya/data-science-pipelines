@@ -50,9 +50,7 @@ kustomization_yamls_v3=(
   "env/platform-agnostic-multi-user-emissary"
 )
 for path in "${kustomization_yamls_v3[@]}"
-do
-  cd "${MANIFESTS_DIR}/${path}"
-  kustomize edit fix
+do  
   kustomize build "${MANIFESTS_DIR}/${path}" >/dev/null
 done
 
