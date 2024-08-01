@@ -26,7 +26,7 @@ pushd "${TMP}"
 KUSTOMIZE_VERSION=5.2.1
 
 
-# Remove existing kustomize if it exists
+# Remove existing kustomize if it existss
 if [ -f "/usr/local/bin/kustomize" ]; then
     echo "Removing existing kustomize from /usr/local/bin"
     sudo rm /usr/local/bin/kustomize
