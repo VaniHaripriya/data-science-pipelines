@@ -3,6 +3,7 @@ name: kubeflow pipelines manifests tests
 on:
   push:
     branches: [master]
+    
   pull_request:
     paths:
       - 'manifests/kustomize/**'     
