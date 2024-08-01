@@ -32,7 +32,7 @@ mv yq_linux_amd64 /usr/local/bin/yq
 # Install kpt
 KPT_VERSION=1.0.0-beta.54
 curl -s -LO "https://github.com/GoogleContainerTools/kpt/releases/download/v${KPT_VERSION}/kpt_linux_amd64"
-tar -xzf kpt_linux_amd64-${KPT_VERSION}.tar.gz
+chmod +x kpt_linux_amd64
 mv kpt /usr/local/bin/kpt
 
 popd
