@@ -22,23 +22,22 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)"
 TMP="$(mktemp -d)"
 
 pushd "${TMP}"
-# Install Kustomize
-KUSTOMIZE_VERSION=5.2.1
 
-
-# Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries//
-curl -s -O "https://raw.githubusercontent.com/\
-kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
-chmod +x install_kustomize.sh
-./install_kustomize.sh "${KUSTOMIZE_VERSION}" /usr/local/bin/
 
 # Reference: https://github.com/mikefarah/yq/releases/tag/3.4.1
 curl -s -LO "https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64"
 chmod +x yq_linux_amd64
 mv yq_linux_amd64 /usr/local/bin/yq
+
+# Install kpt
+KPT_VERSION=1.0.0
+curl -s -LO "https://github.com/GoogleContainerTools/kpt/releases/download/v${KPT_VERSION}/kpt_linux_amd64-${KPT_VERSION}.tar.gz"
+tar -xzf kpt_linux_amd64-${KPT_VERSION}.tar.gz
+mv kpt /usr/local/bin/kpt
+
 popd
 
-# kpt and kubectl should already be installed in gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+# kubectl should already be installed in google-github-actions/setup-gcloud@v2:latest
 # so we do not need to install them here
 
 # trigger real unit tests
