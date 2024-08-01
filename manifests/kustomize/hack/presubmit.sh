@@ -24,7 +24,7 @@ TMP="$(mktemp -d)"
 pushd "${TMP}"
 # Install Kustomize
 KUSTOMIZE_VERSION=5.2.1
-# Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries/
+# Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries//
 curl -s -O "https://raw.githubusercontent.com/\
 kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 chmod +x install_kustomize.sh
