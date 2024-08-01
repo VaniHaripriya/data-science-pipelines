@@ -1,0 +1,23 @@
+name: kubeflow pipelines manifests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    paths:
+      - 'manifests/kustomize/**'     
+
+jobs:
+  kubeflow-pipelines-manifests:
+    runs-on: ubuntu-24.04    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          version: 'latest'
+
+      - name: Run tests
+        run: ./manifests/kustomize/hack/presubmit.sh
