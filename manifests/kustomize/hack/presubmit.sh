@@ -23,6 +23,19 @@ TMP="$(mktemp -d)"
 
 pushd "${TMP}"
 
+# Install Kustomize
+KUSTOMIZE_VERSION=5.2.1
+
+# Remove existing kustomize if it exists
+if [ -f "/usr/local/bin/kustomize" ]; then
+    echo "Removing existing kustomize from /usr/local/bin"
+    sudo rm /usr/local/bin/kustomize
+fi
+
+# Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries//
+curl -s -O "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
+chmod +x install_kustomize.sh
+./install_kustomize.sh "${KUSTOMIZE_VERSION}" /usr/local/bin/
 
 # Reference: https://github.com/mikefarah/yq/releases/tag/3.4.1
 curl -s -LO "https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64"
@@ -31,13 +44,15 @@ mv yq_linux_amd64 /usr/local/bin/yq
 
 # Install kpt
 KPT_VERSION=1.0.0-beta.54
+
+# Reference: https://github.com/GoogleContainerTools/kpt/releases/tag/v1.0.0-beta.54
 curl -s -LO "https://github.com/GoogleContainerTools/kpt/releases/download/v${KPT_VERSION}/kpt_linux_amd64"
 chmod +x kpt_linux_amd64
 mv kpt_linux_amd64 /usr/local/bin/kpt
 
 popd
 
-# kubectl should already be installed in google-github-actions/setup-gcloud@v2:latest
+# kustomize and kubectl should already be installed in google-github-actions/setup-gcloud@v2:latest
 # so we do not need to install them here
 
 # trigger real unit tests
