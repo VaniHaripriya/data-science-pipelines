@@ -26,12 +26,6 @@ pushd "${TMP}"
 KUSTOMIZE_VERSION=5.2.1
 
 
-# Remove existing kustomize if it existss
-if [ -f "/usr/local/bin/kustomize" ]; then
-    echo "Removing existing kustomize from /usr/local/bin"
-    sudo rm /usr/local/bin/kustomize
-fi
-
 # Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries//
 curl -s -O "https://raw.githubusercontent.com/\
 kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
