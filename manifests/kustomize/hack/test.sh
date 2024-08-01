@@ -51,6 +51,8 @@ kustomization_yamls_v3=(
 )
 for path in "${kustomization_yamls_v3[@]}"
 do
+  cd "${MANIFESTS_DIR}/${path}"
+  kustomize edit fix
   kustomize build "${MANIFESTS_DIR}/${path}" >/dev/null
 done
 
