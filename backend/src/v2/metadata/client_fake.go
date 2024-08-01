@@ -19,9 +19,14 @@ package metadata
 
 import (
 	"context"
+<<<<<<< HEAD
 	"encoding/json"
 	"fmt"
 	"github.com/golang/glog"
+=======
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
+
+>>>>>>> upstream-kubeflow-pipelines/master
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
@@ -49,7 +54,11 @@ func NewFakeClient() *FakeClient {
 	return fakeClient
 }
 
+<<<<<<< HEAD
 func (c *FakeClient) GetPipeline(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot string, bucketSessionInfo string) (*Pipeline, error) {
+=======
+func (c *FakeClient) GetPipeline(ctx context.Context, pipelineName, runID, namespace, runResource, pipelineRoot string, storeSessionInfo string) (*Pipeline, error) {
+>>>>>>> upstream-kubeflow-pipelines/master
 	return nil, nil
 }
 
@@ -134,7 +143,7 @@ func (c *FakeClient) GetOutputArtifactsByExecutionId(ctx context.Context, execut
 	return nil, nil
 }
 
-func (c *FakeClient) RecordArtifact(ctx context.Context, outputName, schema string, runtimeArtifact *pipelinespec.RuntimeArtifact, state pb.Artifact_State) (*OutputArtifact, error) {
+func (c *FakeClient) RecordArtifact(ctx context.Context, outputName, schema string, runtimeArtifact *pipelinespec.RuntimeArtifact, state pb.Artifact_State, bucketConfig *objectstore.Config) (*OutputArtifact, error) {
 	return nil, nil
 }
 

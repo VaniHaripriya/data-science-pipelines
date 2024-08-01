@@ -145,7 +145,7 @@ func (l *LauncherV2) Execute(ctx context.Context) (err error) {
 	defer func() {
 		if perr := l.publish(ctx, execution, executorOutput, outputArtifacts, status); perr != nil {
 			if err != nil {
-				err = fmt.Errorf("failed to publish execution with error %w after execution failed: %w", perr, err)
+				err = fmt.Errorf("failed to publish execution with error %s after execution failed: %s", perr.Error(), err.Error())
 			} else {
 				err = perr
 			}
@@ -158,12 +158,20 @@ func (l *LauncherV2) Execute(ctx context.Context) (err error) {
 		return err
 	}
 	fingerPrint := execution.FingerPrint()
+<<<<<<< HEAD
 	bucketSessionInfo, err := objectstore.GetSessionInfoFromString(execution.GetPipeline().GetPipelineBucketSession())
+=======
+	storeSessionInfo, err := objectstore.GetSessionInfoFromString(execution.GetPipeline().GetStoreSessionInfo())
+>>>>>>> upstream-kubeflow-pipelines/master
 	if err != nil {
 		return err
 	}
 	pipelineRoot := execution.GetPipeline().GetPipelineRoot()
+<<<<<<< HEAD
 	bucketConfig, err := objectstore.ParseBucketConfig(pipelineRoot, bucketSessionInfo)
+=======
+	bucketConfig, err := objectstore.ParseBucketConfig(pipelineRoot, storeSessionInfo)
+>>>>>>> upstream-kubeflow-pipelines/master
 	if err != nil {
 		return err
 	}
@@ -461,7 +469,7 @@ func uploadOutputArtifacts(ctx context.Context, executorInput *pipelinespec.Exec
 		if err != nil {
 			return nil, fmt.Errorf("failed to determine schema for output %q: %w", name, err)
 		}
-		mlmdArtifact, err := opts.metadataClient.RecordArtifact(ctx, name, schema, outputArtifact, pb.Artifact_LIVE)
+		mlmdArtifact, err := opts.metadataClient.RecordArtifact(ctx, name, schema, outputArtifact, pb.Artifact_LIVE, opts.bucketConfig)
 		if err != nil {
 			return nil, metadataErr(err)
 		}
@@ -541,17 +549,25 @@ func fetchNonDefaultBuckets(
 		}
 		// TODO: Support multiple artifacts someday, probably through the v2 engine.
 		artifact := artifactList.Artifacts[0]
+<<<<<<< HEAD
 		// The artifact does not belong under the s3 path for this run
 		// Reasons:
 		// 1. Artifact is cached from a different run, so it may still be in the default bucket, but under a different run id subpath
 		// 2. Artifact is imported from a different bucket, or obj store
 		// a. If imported, artifact bucket can still be specified in kfp-launcher config (not implemented)
 		// b. If imported, artifact bucket can not be in kfp-launcher config, in this case, return no session and rely on env for aws config
+=======
+		// The artifact does not belong under the object store path for this run. Cases:
+		// 1. Artifact is cached from a different run, so it may still be in the default bucket, but under a different run id subpath
+		// 2. Artifact is imported from the same bucket, but from a different path (re-use the same session)
+		// 3. Artifact is imported from a different bucket, or obj store (default to using user env in this case)
+>>>>>>> upstream-kubeflow-pipelines/master
 		if !strings.HasPrefix(artifact.Uri, defaultBucketConfig.PrefixedBucket()) {
-			nonDefaultBucketConfig, err := objectstore.ParseBucketConfigForArtifactURI(artifact.Uri)
-			if err != nil {
-				return nonDefaultBuckets, fmt.Errorf("failed to parse bucketConfig for output artifact %q with uri %q: %w", name, artifact.GetUri(), err)
+			nonDefaultBucketConfig, parseErr := objectstore.ParseBucketConfigForArtifactURI(artifact.Uri)
+			if parseErr != nil {
+				return nonDefaultBuckets, fmt.Errorf("failed to parse bucketConfig for output artifact %q with uri %q: %w", name, artifact.GetUri(), parseErr)
 			}
+<<<<<<< HEAD
 			// If the run is cached, it will be in the same bucket but under a different path, re-use the default bucket
 			// session in this case.
 			if (nonDefaultBucketConfig.Scheme == defaultBucketConfig.Scheme) && (nonDefaultBucketConfig.BucketName == defaultBucketConfig.BucketName) {
@@ -560,6 +576,15 @@ func fetchNonDefaultBuckets(
 			nonDefaultBucket, err := objectstore.OpenBucket(ctx, k8sClient, namespace, nonDefaultBucketConfig)
 			if err != nil {
 				return nonDefaultBuckets, fmt.Errorf("failed to open bucket for output artifact %q with uri %q: %w", name, artifact.GetUri(), err)
+=======
+			// check if it's same bucket but under a different path, re-use the default bucket session in this case.
+			if (nonDefaultBucketConfig.Scheme == defaultBucketConfig.Scheme) && (nonDefaultBucketConfig.BucketName == defaultBucketConfig.BucketName) {
+				nonDefaultBucketConfig.SessionInfo = defaultBucketConfig.SessionInfo
+			}
+			nonDefaultBucket, bucketErr := objectstore.OpenBucket(ctx, k8sClient, namespace, nonDefaultBucketConfig)
+			if bucketErr != nil {
+				return nonDefaultBuckets, fmt.Errorf("failed to open bucket for output artifact %q with uri %q: %w", name, artifact.GetUri(), bucketErr)
+>>>>>>> upstream-kubeflow-pipelines/master
 			}
 			nonDefaultBuckets[nonDefaultBucketConfig.PrefixedBucket()] = nonDefaultBucket
 		}

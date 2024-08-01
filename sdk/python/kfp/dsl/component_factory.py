@@ -36,7 +36,7 @@ from kfp.dsl.types import custom_artifact_types
 from kfp.dsl.types import type_annotations
 from kfp.dsl.types import type_utils
 
-_DEFAULT_BASE_IMAGE = 'python:3.7'
+_DEFAULT_BASE_IMAGE = 'python:3.8'
 SINGLE_OUTPUT_NAME = 'Output'
 
 
@@ -448,6 +448,14 @@ def extract_component_interface(
     )
 
 
+EXECUTOR_MODULE = 'kfp.dsl.executor_main'
+CONTAINERIZED_PYTHON_COMPONENT_COMMAND = [
+    'python3',
+    '-m',
+    EXECUTOR_MODULE,
+]
+
+
 def _get_command_and_args_for_lightweight_component(
         func: Callable) -> Tuple[List[str], List[str]]:
     imports_source = [
@@ -466,11 +474,11 @@ def _get_command_and_args_for_lightweight_component(
     command = [
         'sh',
         '-ec',
-        textwrap.dedent('''\
+        textwrap.dedent(f'''\
                     program_path=$(mktemp -d)
 
                     printf "%s" "$0" > "$program_path/ephemeral_component.py"
-                    _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main \
+                    _KFP_RUNTIME=true python3 -m {EXECUTOR_MODULE} \
                         --component_module_path \
                         "$program_path/ephemeral_component.py" \
                         "$@"
@@ -490,11 +498,6 @@ def _get_command_and_args_for_lightweight_component(
 
 def _get_command_and_args_for_containerized_component(
         function_name: str) -> Tuple[List[str], List[str]]:
-    command = [
-        'python3',
-        '-m',
-        'kfp.dsl.executor_main',
-    ]
 
     args = [
         '--executor_input',
@@ -502,7 +505,7 @@ def _get_command_and_args_for_containerized_component(
         '--function_to_execute',
         function_name,
     ]
-    return command, args
+    return CONTAINERIZED_PYTHON_COMPONENT_COMMAND, args
 
 
 def create_component_from_func(
@@ -534,7 +537,7 @@ def create_component_from_func(
     if base_image is None:
         base_image = _DEFAULT_BASE_IMAGE
         warnings.warn(
-            ("Python 3.7 has reached end-of-life. The default base_image used by the @dsl.component decorator will switch from 'python:3.7' to 'python:3.8' on April 23, 2024. To ensure your existing components work with versions of the KFP SDK released after that date, you should provide an explicit base_image argument and ensure your component works as intended on Python 3.8."
+            ("The default base_image used by the @dsl.component decorator will switch from 'python:3.8' to 'python:3.9' on Oct 1, 2024. To ensure your existing components work with versions of the KFP SDK released after that date, you should provide an explicit base_image argument and ensure your component works as intended on Python 3.9."
             ),
             FutureWarning,
             stacklevel=2,

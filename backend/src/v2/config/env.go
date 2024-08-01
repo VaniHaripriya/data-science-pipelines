@@ -19,7 +19,10 @@ package config
 import (
 	"context"
 	"fmt"
+	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 	"io/ioutil"
+	"sigs.k8s.io/yaml"
+	"strconv"
 	"strings"
 
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
@@ -35,7 +38,22 @@ const (
 	configMapName                = "kfp-launcher"
 	defaultPipelineRoot          = "minio://mlpipeline/v2/artifacts"
 	configKeyDefaultPipelineRoot = "defaultPipelineRoot"
+	configBucketProviders        = "providers"
+	minioArtifactSecretName      = "mlpipeline-minio-artifact"
+	// The k8s secret "Key" for "Artifact SecretKey" and "Artifact AccessKey"
+	minioArtifactSecretKeyKey = "secretkey"
+	minioArtifactAccessKeyKey = "accesskey"
 )
+
+type BucketProviders struct {
+	Minio *MinioProviderConfig `json:"minio"`
+	S3    *S3ProviderConfig    `json:"s3"`
+	GCS   *GCSProviderConfig   `json:"gs"`
+}
+
+type SessionInfoProvider interface {
+	ProvideSessionInfo(path string) (objectstore.SessionInfo, error)
+}
 
 // Config is the KFP runtime configuration.
 type Config struct {
@@ -56,7 +74,7 @@ func FromConfigMap(ctx context.Context, clientSet kubernetes.Interface, namespac
 	return &Config{data: config.Data}, nil
 }
 
-// Config.DefaultPipelineRoot gets the configured default pipeline root.
+// DefaultPipelineRoot gets the configured default pipeline root.
 func (c *Config) DefaultPipelineRoot() string {
 	// The key defaultPipelineRoot is optional in launcher config.
 	if c == nil || c.data[configKeyDefaultPipelineRoot] == "" {
@@ -86,6 +104,7 @@ func InPodName() (string, error) {
 	return strings.TrimSuffix(name, "\n"), nil
 }
 
+<<<<<<< HEAD
 const (
 	configBucketProviders = "providers"
 	// The endpoint uses Kubernetes service DNS name with namespace:
@@ -132,11 +151,19 @@ func (c *Config) GetBucketSessionInfo(path string) (objectstore.SessionInfo, err
 	bucketName := bucketConfig.BucketName
 	bucketPrefix := bucketConfig.Prefix
 	provider := strings.TrimSuffix(bucketConfig.Scheme, "://")
+=======
+func (c *Config) GetStoreSessionInfo(path string) (objectstore.SessionInfo, error) {
+	provider, err := objectstore.ParseProviderFromPath(path)
+	if err != nil {
+		return objectstore.SessionInfo{}, err
+	}
+>>>>>>> upstream-kubeflow-pipelines/master
 	bucketProviders, err := c.getBucketProviders()
 	if err != nil {
 		return objectstore.SessionInfo{}, err
 	}
 
+<<<<<<< HEAD
 	// Case 1: No "providers" field in kfp-launcher
 	if bucketProviders == nil {
 		// Use default minio if provider is minio, otherwise we default to executor env
@@ -235,6 +262,41 @@ func getDefaultMinioSessionInfo() (sessionInfo objectstore.SessionInfo) {
 		SecretKeyKey: minioArtifactSecretKeyKey,
 	}
 	return sess
+=======
+	var sessProvider SessionInfoProvider
+
+	switch provider {
+	case "minio":
+		if bucketProviders == nil || bucketProviders.Minio == nil {
+			sessProvider = &MinioProviderConfig{}
+		} else {
+			sessProvider = bucketProviders.Minio
+		}
+		break
+	case "s3":
+		if bucketProviders == nil || bucketProviders.S3 == nil {
+			sessProvider = &S3ProviderConfig{}
+		} else {
+			sessProvider = bucketProviders.S3
+		}
+		break
+	case "gs":
+		if bucketProviders == nil || bucketProviders.GCS == nil {
+			sessProvider = &GCSProviderConfig{}
+		} else {
+			sessProvider = bucketProviders.GCS
+		}
+		break
+	default:
+		return objectstore.SessionInfo{}, fmt.Errorf("Encountered unsupported provider in provider config %s", provider)
+	}
+
+	sess, err := sessProvider.ProvideSessionInfo(path)
+	if err != nil {
+		return objectstore.SessionInfo{}, err
+	}
+	return sess, nil
+>>>>>>> upstream-kubeflow-pipelines/master
 }
 
 // getBucketProviders gets the provider configuration
@@ -251,6 +313,7 @@ func (c *Config) getBucketProviders() (*BucketProviders, error) {
 	return bucketProviders, nil
 }
 
+<<<<<<< HEAD
 func getBucketAuthByPrefix(authConfigs []AuthConfig, bucketName, prefix string) *AuthConfig {
 	for _, authConfig := range authConfigs {
 		if authConfig.BucketName == bucketName && (authConfig.KeyPrefix == prefix) {
@@ -258,4 +321,21 @@ func getBucketAuthByPrefix(authConfigs []AuthConfig, bucketName, prefix string) 
 		}
 	}
 	return nil
+=======
+func getDefaultMinioSessionInfo() (objectstore.SessionInfo, error) {
+	sess := objectstore.SessionInfo{
+		Provider: "minio",
+		Params: map[string]string{
+			"region":     "minio",
+			"endpoint":   objectstore.MinioDefaultEndpoint(),
+			"disableSSL": strconv.FormatBool(true),
+			"fromEnv":    strconv.FormatBool(false),
+			"secretName": minioArtifactSecretName,
+			// The k8s secret "Key" for "Artifact SecretKey" and "Artifact AccessKey"
+			"accessKeyKey": minioArtifactAccessKeyKey,
+			"secretKeyKey": minioArtifactSecretKeyKey,
+		},
+	}
+	return sess, nil
+>>>>>>> upstream-kubeflow-pipelines/master
 }
