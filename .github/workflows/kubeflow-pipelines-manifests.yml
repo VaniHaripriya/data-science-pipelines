@@ -5,6 +5,7 @@ on:
     branches: [master]
   pull_request:
     paths:
+      - '.github/workflows/kubeflow-pipelines-manifests.yml'
       - 'manifests/kustomize/**'     
 
 jobs:
@@ -12,12 +13,7 @@ jobs:
     runs-on: ubuntu-22.04    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          version: 'latest'
+        uses: actions/checkout@v4     
 
       - name: Run tests
         run: ./manifests/kustomize/hack/presubmit.sh
