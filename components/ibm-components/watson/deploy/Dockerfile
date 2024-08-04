@@ -1,4 +1,4 @@
-FROM python:3.6-slim
+FROM python:3.13.0rc1-slim
   
 # Directories for model codes and secrets
 RUN mkdir /app
