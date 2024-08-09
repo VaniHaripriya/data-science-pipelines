@@ -23,16 +23,16 @@ TMP="$(mktemp -d)"
 
 pushd "${TMP}"
 
-# Install Kustomize
+# Install kustomize
 KUSTOMIZE_VERSION=5.2.1
-# Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries/
-curl -s -O "https://raw.githubusercontent.com/\
-kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
-chmod +x install_kustomize.sh
-./install_kustomize.sh "${KUSTOMIZE_VERSION}" /usr/local/bin/
+# Reference: https://github.com/kubernetes-sigs/kustomize/releases/tag/kustomize%2Fv5.2.1
+curl -s -LO "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+tar -xzf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
+chmod +x kustomize
+mv kustomize /usr/local/bin/kustomize
 
 # Add /usr/local/bin to the PATH to ensure kustomize 5.2.1 has priority
-export PATH="/usr/local/bin:$PATH"
+# export PATH="/usr/local/bin:$PATH"
 
 # Install yq
 # Reference: https://github.com/mikefarah/yq/releases/tag/3.4.1
