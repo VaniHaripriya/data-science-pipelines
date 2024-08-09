@@ -154,7 +154,11 @@ func Test_parseCloudBucket(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+<<<<<<< HEAD
+			got, err := objectstore.ParseBucketConfig(tt.path, nil)
+=======
 			got, err := ParseBucketConfig(tt.path, tt.want.SessionInfo)
+>>>>>>> upstream-kubeflow-pipelines/master
 			if (err != nil) != tt.wantErr {
 				t.Errorf("%q: parseCloudBucket() error = %v, wantErr %v", tt.name, err, tt.wantErr)
 				return

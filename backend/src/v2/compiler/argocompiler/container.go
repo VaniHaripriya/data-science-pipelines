@@ -15,24 +15,37 @@
 package argocompiler
 
 import (
+<<<<<<< HEAD
+	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+=======
 	"fmt"
 	"os"
 	"strings"
 
 	wfapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"github.com/golang/protobuf/jsonpb"
+>>>>>>> upstream-kubeflow-pipelines/master
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
 	k8score "k8s.io/api/core/v1"
+	"os"
+	"strconv"
 )
 
 const (
 	volumeNameKFPLauncher    = "kfp-launcher"
+<<<<<<< HEAD
+	volumeNameCABUndle       = "ca-bundle"
+	DefaultLauncherImage     = "gcr.io/ml-pipeline/kfp-launcher@sha256:80cf120abd125db84fa547640fd6386c4b2a26936e0c2b04a7d3634991a850a4"
+	LauncherImageEnvVar      = "V2_LAUNCHER_IMAGE"
+	DefaultDriverImage       = "gcr.io/ml-pipeline/kfp-driver@sha256:8e60086b04d92b657898a310ca9757631d58547e76bbbb8bfc376d654bef1707"
+=======
 	volumeNameCABundle       = "ca-bundle"
 	DefaultLauncherImage     = "gcr.io/ml-pipeline/kfp-launcher@sha256:8fe5e6e4718f20b021736022ad3741ddf2abd82aa58c86ae13e89736fdc3f08f"
 	LauncherImageEnvVar      = "V2_LAUNCHER_IMAGE"
 	DefaultDriverImage       = "gcr.io/ml-pipeline/kfp-driver@sha256:3c0665cd36aa87e4359a4c8b6271dcba5bdd817815cd0496ed12eb5dde5fd2ec"
+>>>>>>> upstream-kubeflow-pipelines/master
 	DriverImageEnvVar        = "V2_DRIVER_IMAGE"
 	gcsScratchLocation       = "/gcs"
 	gcsScratchName           = "gcs-scratch"
@@ -152,6 +165,7 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 		Container: &k8score.Container{
 			Image:   GetDriverImage(),
 			Command: []string{"driver"},
+			Env:     MLPipelineServiceEnv,
 			Args: []string{
 				"--type", "CONTAINER",
 				"--pipeline_name", c.spec.GetPipelineInfo().GetName(),
@@ -165,10 +179,14 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 				"--pod_spec_patch_path", outputPath(paramPodSpecPatch),
 				"--condition_path", outputPath(paramCondition),
 				"--kubernetes_config", inputValue(paramKubernetesConfig),
+				"--mlPipelineServiceTLSEnabled", strconv.FormatBool(c.mlPipelineServiceTLSEnabled),
 			},
 			Resources: driverResources,
 		},
 	}
+
+	ConfigureCABundle(t)
+
 	c.templates[name] = t
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *t)
 	return name
@@ -354,9 +372,12 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 				},
 			},
 			EnvFrom: []k8score.EnvFromSource{metadataEnvFrom},
-			Env:     commonEnvs,
+			Env:     append(commonEnvs, MLPipelineServiceEnv...),
 		},
 	}
+<<<<<<< HEAD
+	ConfigureCABundle(executor)
+=======
 	// Update pod metadata if it defined in the Kubernetes Spec
 	if kubernetesConfigString, ok := c.wf.Annotations[annotationKubernetesSpec+refName]; ok {
 		k8sExecCfg := &kubernetesplatform.KubernetesExecutorConfig{}
@@ -417,6 +438,7 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 		executor.Container.VolumeMounts = append(executor.Container.VolumeMounts, volumeMount)
 
 	}
+>>>>>>> upstream-kubeflow-pipelines/master
 	c.templates[nameContainerImpl] = executor
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *container, *executor)
 	return nameContainerExecutor
