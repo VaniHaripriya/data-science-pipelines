@@ -36,6 +36,7 @@ chmod +x kustomize
 # Install yq
 curl -s -LO "https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64"
 chmod +x yq_linux_amd64
+mv yq_linux_amd64 yq
 
 # Install kpt
 KPT_VERSION=1.0.0-beta.54
