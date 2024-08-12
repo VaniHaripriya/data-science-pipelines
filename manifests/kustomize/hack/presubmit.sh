@@ -52,11 +52,6 @@ popd
 # Export PATH again to ensure it's propagated
 export PATH="$TMP:$PATH"
 
-# Print PATH and verify binaries are accessible
-echo "PATH: $PATH"
-which kustomize
-which yq_linux_amd64
-which kpt
 
 # trigger real unit tests
 ${DIR}/test.sh
