@@ -34,6 +34,8 @@ message KubernetesExecutorConfig {
     int64 active_deadline_seconds = 10;
     repeated FieldPathAsEnv field_path_as_env = 11;
     repeated Toleration tolerations = 12;
+<<<<<<< HEAD
+=======
     repeated GenericEphemeralVolume generic_ephemeral_volume = 13;
     repeated NodeAffinityTerm node_affinity = 14;
     repeated PodAffinityTerm pod_affinity = 15;
@@ -46,6 +48,7 @@ message EnabledSharedMemory {
     string volume_name = 1;
     // Size of the Shared Memory.
     string size = 2;
+>>>>>>> upstream-kubeflow-pipelines/master
 }
 
 message SecretAsVolume {
@@ -168,6 +171,8 @@ message ConfigMapAsEnv {
     repeated ConfigMapKeyToEnvMap key_to_env = 2;
 }
 
+<<<<<<< HEAD
+=======
 message GenericEphemeralVolume {
     // more details in https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/#generic-ephemeral-volumes
     // Name of the ephemeral volume.
@@ -188,6 +193,7 @@ message GenericEphemeralVolume {
     PodMetadata metadata = 7;
 }
 
+>>>>>>> upstream-kubeflow-pipelines/master
 message ImagePullSecret {
     // Name of the image pull secret.
     string secret_name = 1;
@@ -208,6 +214,8 @@ message Toleration {
     string effect = 4;
     optional int64 toleration_seconds = 5;
 }
+<<<<<<< HEAD
+=======
 
 // Matches https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#labelselectorrequirement-v1-meta and
 // https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#nodeselectorrequirement-v1-core
@@ -244,3 +252,4 @@ message EmptyDirMount {
     optional string medium = 3;
     optional string size_limit = 4;
 }
+>>>>>>> upstream-kubeflow-pipelines/master

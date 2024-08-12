@@ -92,7 +92,11 @@ def pipeline():
     task = print_config_map()
     kubernetes.use_config_map_as_env(task,
                                  config_map_name='my-cm',
+<<<<<<< HEAD
+                                 secret_key_to_env={'foo': 'CM_VAR'})
+=======
                                  config_map_key_to_env={'foo': 'CM_VAR'})
+>>>>>>> upstream-kubeflow-pipelines/master
 ```
 
 ### ConfigMap: As mounted volume
@@ -180,6 +184,8 @@ def my_pipeline():
         pvc_name=pvc1.outputs['name']).after(task2)
 ```
 
+<<<<<<< HEAD
+=======
 ### PersistentVolumeClaim: Create PVC on-the-fly tied to your pod's lifecycle
 ```python
 from kfp import dsl
@@ -203,6 +209,7 @@ def my_pipeline():
     )
 ```
 
+>>>>>>> upstream-kubeflow-pipelines/master
 ### Pod Metadata: Add pod labels and annotations to the container pod's definition
 ```python
 from kfp import dsl

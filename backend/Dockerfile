@@ -1,4 +1,4 @@
-# Copyright 2021-2022 The Kubeflow Authors
+# Copyright 2021-2024 The Kubeflow Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,21 +63,17 @@ ENV LOG_LEVEL info
 
 WORKDIR /bin
 
-COPY backend/src/apiserver/config/ /config
+COPY --from=builder /opt/app-root/src/backend/src/apiserver/config/ /config
 COPY --from=builder /bin/apiserver /bin/apiserver
 
-# Copy licenses and notices.
-COPY --from=builder /tmp/licenses.csv /third_party/licenses.csv
-COPY --from=builder /tmp/NOTICES /third_party/NOTICES
-COPY --from=compiler /samples/ /samples/
 RUN chmod +x /bin/apiserver
 
-# Adding CA certificate so API server can download pipeline through URL and wget is used for liveness/readiness probe command
-RUN apt-get update && apt-get install -y ca-certificates wget
+USER root
 
-# Pin sample doc links to the commit that built the backend image
-RUN sed -E "s#/(blob|tree)/master/#/\1/${COMMIT_SHA}/#g" -i /config/sample_config.json && \
-    sed -E "s/%252Fmaster/%252F${COMMIT_SHA}/#g" -i /config/sample_config.json
+# Adding CA certificate so API server can download pipeline through URL and wget is used for liveness/readiness probe command
+RUN microdnf install -y ca-certificates wget
+
+USER 1001
 
 # Expose apiserver port
 EXPOSE 8888

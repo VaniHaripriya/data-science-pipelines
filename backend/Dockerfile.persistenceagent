@@ -38,9 +38,6 @@ USER appuser
 WORKDIR /bin
 
 COPY --from=builder /bin/persistence_agent /bin/persistence_agent
-# Copy licenses and notices.
-COPY --from=builder /tmp/licenses.csv /third_party/licenses.csv
-COPY --from=builder /tmp/NOTICES /third_party/NOTICES
 
 ENV NAMESPACE ""
 

@@ -1,4 +1,4 @@
-# Copyright 2023 The Kubeflow Authors
+# Copyright 2021-2024 The Kubeflow Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,8 +35,9 @@ USER appuser
 WORKDIR /bin
 
 COPY --from=builder /bin/driver /bin/driver
-# Copy licenses and notices.
-COPY --from=builder /tmp/licenses.csv /third_party/licenses.csv
-COPY --from=builder /tmp/NOTICES /third_party/NOTICES
+RUN chmod +x /bin/driver
 
-ENTRYPOINT [ "/bin/driver" ]
+ENTRYPOINT ["/bin/driver"]
+
+LABEL name="ds-pipelines-driver" \
+      summary="DSP Driver"

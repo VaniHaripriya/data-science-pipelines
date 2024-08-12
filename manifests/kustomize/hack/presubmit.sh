@@ -16,34 +16,44 @@
 
 # This is a wrapper script on top of test.sh, it installs required dependencies.
 
+#!/bin/bash
 set -ex
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)"
 TMP="$(mktemp -d)"
 
-pushd "${TMP}"
-# Install Kustomize
-KUSTOMIZE_VERSION=5.2.1
-# Reference: https://kubectl.docs.kubernetes.io/installation/kustomize/binaries/
-curl -s -O "https://raw.githubusercontent.com/\
-kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
-chmod +x install_kustomize.sh
-./install_kustomize.sh "${KUSTOMIZE_VERSION}" /usr/local/bin/
+# Add TMP to PATH and export it
+export PATH="$TMP:$PATH"
 
-# Reference: https://github.com/mikefarah/yq/releases/tag/3.4.1
+pushd "${TMP}"
+
+# Install kustomize
+KUSTOMIZE_VERSION=5.2.1
+curl -s -LO "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+tar -xzf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
+chmod +x kustomize
+
+# Install yq
 curl -s -LO "https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64"
 chmod +x yq_linux_amd64
-mv yq_linux_amd64 /usr/local/bin/yq
-popd
+mv yq_linux_amd64 yq
 
-# kpt and kubectl should already be installed in gcr.io/google.com/cloudsdktool/cloud-sdk:latest
-# so we do not need to install them here
+# Install kpt
+KPT_VERSION=1.0.0-beta.54
+curl -s -LO "https://github.com/kptdev/kpt/releases/download/v${KPT_VERSION}/kpt_linux_amd64"
+chmod +x kpt_linux_amd64
+mv kpt_linux_amd64 kpt
+
+# Ensure all binaries are in the temporary directory
+ls -l "${TMP}"
+
+popd
 
 # trigger real unit tests
 ${DIR}/test.sh
-# verify release script runs properly
 
+# verify release script runs properly
 ${DIR}/release.sh v1.2.3-dummy
-# --no-pager sends output to stdout
-# Show git diff, so people can manually verify results of the release script
+
+# Show git diff
 git --no-pager diff
