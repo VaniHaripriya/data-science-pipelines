@@ -16,44 +16,51 @@
 
 # This is a wrapper script on top of test.sh, it installs required dependencies.
 
+#!/bin/bash
 set -ex
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)"
 TMP="$(mktemp -d)"
 
-# Add TMP to PATH
-PATH="$TMP:$PATH"
+# Add TMP to PATH and export it
+export PATH="$TMP:$PATH"
 
 pushd "${TMP}"
 
 # Install kustomize
 KUSTOMIZE_VERSION=5.2.1
-# Reference: https://github.com/kubernetes-sigs/kustomize/releases/tag/kustomize%2Fv5.2.1
 curl -s -LO "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
 tar -xzf kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
 chmod +x kustomize
 
 # Install yq
-# Reference: https://github.com/mikefarah/yq/releases/tag/3.4.1
 curl -s -LO "https://github.com/mikefarah/yq/releases/download/3.4.1/yq_linux_amd64"
 chmod +x yq_linux_amd64
 
 # Install kpt
 KPT_VERSION=1.0.0-beta.54
-# Reference: https://github.com/kptdev/kpt/releases/tag/v1.0.0-beta.54
 curl -s -LO "https://github.com/kptdev/kpt/releases/download/v${KPT_VERSION}/kpt_linux_amd64"
 chmod +x kpt_linux_amd64
 
+# Ensure all binaries are in the temporary directory
+ls -l "${TMP}"
+
 popd
 
-# Export PATH to ensure the scripts can access the binaries
+# Export PATH again to ensure it's propagated
 export PATH="$TMP:$PATH"
+
+# Print PATH and verify binaries are accessible
+echo "PATH: $PATH"
+which kustomize
+which yq_linux_amd64
+which kpt_linux_amd64
 
 # trigger real unit tests
 ${DIR}/test.sh
-# verify release script runs properly
 
+# verify release script runs properly
 ${DIR}/release.sh v1.2.3-dummy
-# --no-pager sends output to stdout
-# Show git diff, so people can manually verify results of the release script
+
+# Show git diff
 git --no-pager diff
