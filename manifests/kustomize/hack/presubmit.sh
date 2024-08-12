@@ -55,7 +55,7 @@ export PATH="$TMP:$PATH"
 echo "PATH: $PATH"
 which kustomize
 which yq_linux_amd64
-which kpt_linux_amd64
+which kpt
 
 # trigger real unit tests
 ${DIR}/test.sh
