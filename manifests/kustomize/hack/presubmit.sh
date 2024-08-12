@@ -41,6 +41,7 @@ chmod +x yq_linux_amd64
 KPT_VERSION=1.0.0-beta.54
 curl -s -LO "https://github.com/kptdev/kpt/releases/download/v${KPT_VERSION}/kpt_linux_amd64"
 chmod +x kpt_linux_amd64
+mv kpt_linux_amd64 kpt
 
 # Ensure all binaries are in the temporary directory
 ls -l "${TMP}"
