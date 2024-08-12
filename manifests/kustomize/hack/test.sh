@@ -22,6 +22,9 @@ set -ex
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)"
 MANIFESTS_DIR="${DIR}/.."
 
+# Add TMP to PATH
+export PATH="$TMP:$PATH"
+
 # Verify required tools are installed and show their versions.
 kubectl version --client=true
 kustomize version
