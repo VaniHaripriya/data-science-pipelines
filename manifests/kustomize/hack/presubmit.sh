@@ -46,6 +46,9 @@ chmod +x kpt_linux_amd64
 
 popd
 
+# Export PATH to ensure the scripts can access the binaries
+export PATH="$TMP:$PATH"
+
 # trigger real unit tests
 ${DIR}/test.sh
 # verify release script runs properly

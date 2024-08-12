@@ -20,9 +20,6 @@ TAG_NAME=$1
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)"
 MANIFEST_DIR="${DIR}/.."
 
-# Add TMP to PATH
-export PATH="$TMP:$PATH"
-
 if [[ -z "$TAG_NAME" ]]; then
   echo "Usage: release.sh <release-tag>" >&2
   exit 1
