@@ -49,10 +49,6 @@ ls -l "${TMP}"
 
 popd
 
-# Export PATH again to ensure it's propagated
-export PATH="$TMP:$PATH"
-
-
 # trigger real unit tests
 ${DIR}/test.sh
 
