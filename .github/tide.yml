@@ -1,0 +1,19 @@
+tide:
+  merge_method:
+    org/repo: squash
+  query:
+    repos:
+      - VaniHaripriya/data-science-pipelines
+    labels:
+      - lgtm
+      - approved
+    missingLabels:
+      - do-not-merge
+    milestone: ""
+    reviewApprovedRequired: true
+    branchProtectionPolicy:
+      org/repo:
+        require_status_checks:
+          contexts:
+            # List of required status checks from the github action workflows
+            - KFP Manifests
