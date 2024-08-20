@@ -16,4 +16,4 @@ tide:
         require_status_checks:
           contexts:
             # List of required status checks from the github action workflows
-            - kubeflow-pipelines-manifests
+            - KFP Manifests
