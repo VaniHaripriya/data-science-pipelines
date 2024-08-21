@@ -24,3 +24,13 @@ tide:
           VaniHaripriya/data-science-pipelines:
             required-contexts:
             - "KFP Manifests"
+            branches:
+              upstream-kubeflow-pipelines-master: # Specify the branch if needed or omit for default
+                from-branch-protection: false
+                required-contexts:
+                - "KFP Manifests"
+                # Optionally define additional contexts if needed
+                optional-contexts:
+                - "optional_test"
+                required-if-present-contexts:
+                - "conditional_test"
