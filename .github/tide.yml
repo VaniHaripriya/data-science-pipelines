@@ -1,19 +1,26 @@
 tide:
   merge_method:
     VaniHaripriya/data-science-pipelines: squash
-  query:
-    repos:
-      - VaniHaripriya/data-science-pipelines
+  
+  queries:
+  - repos:
+    - VaniHaripriya/data-science-pipelines
     labels:
-      - lgtm
-      - approved
+    - lgtm
+    - approved
     missingLabels:
-      - do-not-merge
+    - do-not-merge
     milestone: ""
     reviewApprovedRequired: true
-    branchProtectionPolicy:
-      VaniHaripriya/data-science-pipelines:
-        require_status_checks:
-          contexts:
-            # List of required status checks from the github action workflows
-            - KFP Manifests
+
+  context_options:    
+    from-branch-protection: true    
+    skip-unknown-contexts: true
+    orgs:
+      VaniHaripriya:
+        required-contexts:
+        - "KFP Manifests"
+        repos:
+          VaniHaripriya/data-science-pipelines:
+            required-contexts:
+            - "KFP Manifests"
