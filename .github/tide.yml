@@ -12,7 +12,7 @@ tide:
     milestone: ""
     reviewApprovedRequired: true
     branchProtectionPolicy:
-      org/repo:
+      VaniHaripriya/data-science-pipelines:
         require_status_checks:
           contexts:
             # List of required status checks from the github action workflows
