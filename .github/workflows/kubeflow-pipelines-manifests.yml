@@ -3,17 +3,18 @@ name: KFP Manifests
 on:
   push:
     branches: [master]
-  pull_request:
-    paths:
-      - '.github/workflows/kubeflow-pipelines-manifests.yml'
-      - 'manifests/kustomize/**'     
+  pull_request:  # Trigger on all pull requests
+    branches: [master]  # Or remove this if you want to run on any branch
 
 jobs:
-  kubeflow-pipelines-manifests:    
-    runs-on: ubuntu-latest    
+  kubeflow-pipelines-manifests:
+    if: github.ref == 'refs/heads/master' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4    
+        uses: actions/checkout@v4
 
       - name: Run tests
-        run: ./manifests/kustomize/hack/presubmit.sh 
+        if: contains(github.event.pull_request.title, '[KFP]') || github.event_name == 'push'
+        run: ./manifests/kustomize/hack/presubmit.sh
+
