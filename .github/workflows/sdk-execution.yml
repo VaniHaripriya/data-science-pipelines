@@ -3,13 +3,7 @@ name: KFP SDK execution tests
 on:
   push:
     branches: [master]
-
-  pull_request:
-    paths:
-      - '.github/workflows/sdk-execution.yml'
-      - 'scripts/deploy/github/**'
-      - 'sdk/python/**'
-      - 'api/v2alpha1/**'
+  pull_request: 
 
 jobs:
   sdk-execution-tests:
@@ -58,6 +52,17 @@ jobs:
         run: pip install -r ./test/sdk-execution-tests/requirements.txt
 
       - name: Run tests
+        if: |
+          github.event_name == 'push' ||
+          (
+            github.event_name == 'pull_request' &&
+            (
+              contains(github.event.head_commit.message, '.github/workflows/sdk-execution.yml') ||
+              contains(github.event.head_commit.message, 'scripts/deploy/github/') ||
+              contains(github.event.head_commit.message, 'sdk/python/') ||
+              contains(github.event.head_commit.message, 'api/v2alpha1/')
+            )
+          )
         run: |
           export KFP_ENDPOINT="http://localhost:8888"
           export TIMEOUT_SECONDS=2700
