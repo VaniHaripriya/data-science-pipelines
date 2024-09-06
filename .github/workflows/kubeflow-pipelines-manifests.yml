@@ -3,8 +3,7 @@ name: KFP Manifests
 on:
   push:
     branches: [master]
-  pull_request:  # Trigger on all pull requests
-    branches: [master]  # Or remove this if you want to run on any branch
+  pull_request:  # Trigger on all pull requests   
 
 jobs:
   kubeflow-pipelines-manifests:
