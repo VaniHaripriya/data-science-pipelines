@@ -1,0 +1,71 @@
+# This workflow aggregates the status of multiple CI workflows associated with a pull request (PR).
+# It is triggered when any of the specified workflows complete.
+# The workflow checks the status of all relevant CI workflows, and if they have all succeeded,
+# it adds a 'ci-passed' label to the PR.
+# If any workflow has failed or was skipped, the 'ci-passed' label is not added.
+# You can modify the list of workflows in this file to match the relevant workflows in your CI pipeline.
+
+name: CI Status Aggregation
+
+on:
+  workflow_run:
+    workflows: [
+      'KFP backend visualization tests', 
+      'KFP e2e tests', 
+      'Frontend Tests', 
+      'k8s execution tests',
+      'kfp-kubernetes library tests',
+      'KFP Samples',
+      'KFP Runtime Code Tests',
+      'KFP SDK Tests',
+      'Kubeflow Pipelines V2 integration Tests',
+      'KFP Manifests',
+      'KFP Backend Tests',
+      'KFP Component YAML Test',
+      'KFP SDK Docformatter Test',
+      'KFP SDK execution tests',
+      'KFP SDK Isort Test',
+      'KFP SDK Upgrade Test',
+      'KFP SDK YAPF Tests',
+      'KFP upgrade tests'
+    ]
+    types:
+      - completed
+
+jobs:
+  check_ci_status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Pull Request Number
+        id: get_pr
+        run: |
+          echo "PR_NUMBER=$(jq -r .workflow_run.pull_requests[0].number <<< ${{ toJson(github) }})" >> $GITHUB_ENV
+
+      - name: Check Status of All Workflows
+        run: |
+          pr_number=${{ env.PR_NUMBER }}
+          echo "Checking statuses for PR #$pr_number"
+
+          workflows=("KFP backend visualization tests" "KFP e2e tests" "Frontend Tests" "k8s execution tests" "kfp-kubernetes library tests" "KFP Samples" "KFP Runtime Code Tests" "KFP SDK Tests" "Kubeflow Pipelines V2 integration Tests" "KFP Manifests" "KFP Backend Tests" "KFP Component YAML Test" "KFP SDK Docformatter Test" "KFP SDK execution tests" "KFP SDK Isort Test" "KFP SDK Upgrade Test" "KFP SDK YAPF Tests" "KFP upgrade tests")
+
+          all_success=true
+          for workflow in "${workflows[@]}"; do
+            echo "Checking status for workflow: $workflow"
+            statuses=$(gh run list --workflow "$workflow" --pr $pr_number --json status -q '.[] | .status')
+
+            # Check if any status is not 'success' (including failed or skipped)
+            if echo "$statuses" | grep -qv "success"; then
+              all_success=false
+              break
+            fi
+          done
+
+          if [ "$all_success" = true ]; then
+            echo "All workflows succeeded. Adding 'ci-passed' label."
+            gh pr edit $pr_number --add-label "ci-passed"
+          else
+            echo "Not all workflows succeeded or were skipped. Exiting."
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
