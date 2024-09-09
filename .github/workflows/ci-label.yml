@@ -11,10 +11,7 @@ on:
   workflow_run:
     workflows: ["KFP Manifests"]    
     types:
-      - completed
-  pull_request:
-    branches:
-      - upstream-kubeflow-pipelines-master
+      - completed  
 
 jobs:
   check_ci_status:
