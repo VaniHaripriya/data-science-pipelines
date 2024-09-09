@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build arguments
-ARG SOURCE_CODE=.
+FROM golang:1.21.7-alpine3.19 as builder
 
 # Use ubi8/nodejs-14 as base image
 FROM registry.access.redhat.com/ubi8/go-toolset:1.21 as builder
@@ -39,6 +38,20 @@ COPY ${SOURCE_CODE}/go.sum ./
 COPY ${SOURCE_CODE}/ ./
 
 RUN GO111MODULE=on go build -o /bin/controller backend/src/crd/controller/scheduledworkflow/*.go
+# Check licenses and comply with license terms.
+RUN ./hack/install-go-licenses.sh
+# First, make sure there's no forbidden license.
+RUN go-licenses check ./backend/src/crd/controller/scheduledworkflow
+RUN go-licenses csv ./backend/src/crd/controller/scheduledworkflow > /tmp/licenses.csv && \
+    diff /tmp/licenses.csv backend/third_party_licenses/swf.csv && \
+    go-licenses save ./backend/src/crd/controller/scheduledworkflow --save_path /tmp/NOTICES
+
+FROM alpine:3.19
+
+RUN apk --no-cache add tzdata
+
+RUN adduser -S appuser
+USER appuser
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 WORKDIR /bin
@@ -50,8 +63,6 @@ RUN microdnf makecache && \
      microdnf install -y tzdata.noarch
 
 ENV NAMESPACE ""
+ENV LOG_LEVEL info
 
-CMD /bin/controller --logtostderr=true --namespace=${NAMESPACE}
-
-LABEL name="ds-pipelines-scheduledworkflow" \
-      summary="DSP Scheduled Workflow Controller"
+CMD /bin/controller --logtostderr=true --namespace=${NAMESPACE} --logLevel=${LOG_LEVEL}

@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build arguments
-ARG SOURCE_CODE=.
+FROM golang:1.21.7-alpine3.19 as builder
 
 # Use ubi8/nodejs-14 as base image
 FROM registry.access.redhat.com/ubi8/go-toolset:1.21 as builder
@@ -33,7 +32,18 @@ COPY ${SOURCE_CODE}/ ./
 
 RUN GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags netgo -ldflags '-extldflags "-static"' -o /bin/driver ./backend/src/v2/cmd/driver/*.go
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+# Check licenses and comply with license terms.
+RUN ./hack/install-go-licenses.sh
+# First, make sure there's no forbidden license.
+RUN go-licenses check ./backend/src/v2/cmd/driver
+RUN go-licenses csv ./backend/src/v2/cmd/driver > /tmp/licenses.csv && \
+    diff /tmp/licenses.csv backend/third_party_licenses/driver.csv && \
+    go-licenses save ./backend/src/v2/cmd/driver --save_path /tmp/NOTICES
+
+FROM alpine:3.19
+
+RUN adduser -S appuser
+USER appuser
 
 WORKDIR /bin
 

@@ -21,7 +21,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
-	"google.golang.org/grpc/credentials"
 	"io"
 	"io/ioutil"
 	"math"
@@ -43,13 +42,22 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/resource"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/server"
+	"github.com/kubeflow/pipelines/backend/src/apiserver/template"
+	"github.com/kubeflow/pipelines/backend/src/common/util"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
 
+const (
+	executionTypeEnv = "ExecutionType"
+	launcherEnv      = "Launcher"
+)
+
 var (
+	logLevelFlag       = flag.String("logLevel", "", "Defines the log level for the application.")
 	rpcPortFlag        = flag.String("rpcPortFlag", ":8887", "RPC Port")
 	httpPortFlag       = flag.String("httpPortFlag", ":8888", "Http Proxy Port")
 	configPath         = flag.String("config", "", "Path to JSON file containing config")
@@ -85,6 +93,14 @@ func main() {
 	flag.Parse()
 
 	initConfig()
+	// check ExecutionType Settings if presents
+	if viper.IsSet(executionTypeEnv) {
+		util.SetExecutionType(util.ExecutionType(common.GetStringConfig(executionTypeEnv)))
+	}
+	if viper.IsSet(launcherEnv) {
+		template.Launcher = common.GetStringConfig(launcherEnv)
+	}
+
 	clientManager := cm.NewClientManager()
 
 	tlsConfig, err := initCerts()
@@ -108,14 +124,25 @@ func main() {
 		}
 	}
 
-	go startRpcServer(resourceManager, tlsConfig)
-	startHttpProxy(resourceManager, tlsConfig)
+	logLevel := *logLevelFlag
+	if logLevel == "" {
+		logLevel = "info"
+	}
+
+	level, err := log.ParseLevel(logLevel)
+	if err != nil {
+		log.Fatal("Invalid log level:", err)
+	}
+	log.SetLevel(level)
+
+	go startRpcServer(resourceManager)
+	startHttpProxy(resourceManager)
 
 	clientManager.Close()
 }
 
 // A custom http request header matcher to pass on the user identity
-// Reference: https://github.com/grpc-ecosystem/grpc-gateway/blob/master/docs/_docs/customizingyourgateway.md#mapping-from-http-request-headers-to-grpc-client-metadata
+// Reference: https://github.com/grpc-ecosystem/grpc-gateway/blob/v1.16.0/docs/_docs/customizingyourgateway.md#mapping-from-http-request-headers-to-grpc-client-metadata
 func grpcCustomMatcher(key string) (string, bool) {
 	if strings.EqualFold(key, common.GetKubeflowUserIDHeader()) {
 		return strings.ToLower(key), true
@@ -152,14 +179,15 @@ func startRpcServer(resourceManager *resource.ResourceManager, tlsConfig *tls.Co
 	)
 	sharedJobServer := server.NewJobServer(resourceManager, &server.JobServerOptions{CollectMetrics: *collectMetricsFlag})
 	sharedRunServer := server.NewRunServer(resourceManager, &server.RunServerOptions{CollectMetrics: *collectMetricsFlag})
-	sharedArtifactServer := server.NewArtifactServer(resourceManager, &server.ArtifactServerOptions{CollectMetrics: *collectMetricsFlag})
+	sharedReportServer := server.NewReportServer(resourceManager)
+
 	apiv1beta1.RegisterExperimentServiceServer(s, sharedExperimentServer)
 	apiv2beta1.RegisterArtifactServiceServer(s, sharedArtifactServer)
 	apiv1beta1.RegisterPipelineServiceServer(s, sharedPipelineServer)
 	apiv1beta1.RegisterJobServiceServer(s, sharedJobServer)
 	apiv1beta1.RegisterRunServiceServer(s, sharedRunServer)
 	apiv1beta1.RegisterTaskServiceServer(s, server.NewTaskServer(resourceManager))
-	apiv1beta1.RegisterReportServiceServer(s, server.NewReportServer(resourceManager))
+	apiv1beta1.RegisterReportServiceServer(s, sharedReportServer)
 
 	apiv1beta1.RegisterVisualizationServiceServer(
 		s,
@@ -174,6 +202,7 @@ func startRpcServer(resourceManager *resource.ResourceManager, tlsConfig *tls.Co
 	apiv2beta1.RegisterPipelineServiceServer(s, sharedPipelineServer)
 	apiv2beta1.RegisterRecurringRunServiceServer(s, sharedJobServer)
 	apiv2beta1.RegisterRunServiceServer(s, sharedRunServer)
+	apiv2beta1.RegisterReportServiceServer(s, sharedReportServer)
 
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
@@ -201,11 +230,11 @@ func startHttpProxy(resourceManager *resource.ResourceManager, tlsConfig *tls.Co
 	registerHttpHandlerFromEndpoint(apiv1beta1.RegisterAuthServiceHandlerFromEndpoint, "AuthService", ctx, runtimeMux, tlsConfig)
 
 	// Create gRPC HTTP MUX and register services for v2beta1 api.
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService", ctx, runtimeMux, tlsConfig)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService", ctx, runtimeMux, tlsConfig)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRecurringRunServiceHandlerFromEndpoint, "RecurringRunService", ctx, runtimeMux, tlsConfig)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService", ctx, runtimeMux, tlsConfig)
-	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterArtifactServiceHandlerFromEndpoint, "ArtifactService", ctx, runtimeMux, tlsConfig)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterExperimentServiceHandlerFromEndpoint, "ExperimentService", ctx, runtimeMux)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterPipelineServiceHandlerFromEndpoint, "PipelineService", ctx, runtimeMux)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRecurringRunServiceHandlerFromEndpoint, "RecurringRunService", ctx, runtimeMux)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterRunServiceHandlerFromEndpoint, "RunService", ctx, runtimeMux)
+	registerHttpHandlerFromEndpoint(apiv2beta1.RegisterReportServiceHandlerFromEndpoint, "ReportService", ctx, runtimeMux)
 
 	// Create a top level mux to include both pipeline upload server and gRPC servers.
 	topMux := mux.NewRouter()

@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build arguments
-ARG SOURCE_CODE=.
-ARG CI_CONTAINER_VERSION="unknown"
+FROM golang:1.21.7-alpine3.19 as builder
 
 
 # Use ubi8/go-toolset as base image
@@ -34,6 +32,18 @@ COPY ${SOURCE_CODE}/go.sum ./
 COPY ${SOURCE_CODE}/ ./
 
 RUN GO111MODULE=on go build -o /bin/persistence_agent backend/src/agent/persistence/*.go
+# Check licenses and comply with license terms.
+RUN ./hack/install-go-licenses.sh
+# First, make sure there's no forbidden license.
+RUN go-licenses check ./backend/src/agent/persistence
+RUN go-licenses csv ./backend/src/agent/persistence > /tmp/licenses.csv && \
+    diff /tmp/licenses.csv backend/third_party_licenses/persistence_agent.csv && \
+    go-licenses save ./backend/src/agent/persistence --save_path /tmp/NOTICES
+
+FROM alpine:3.19
+
+RUN adduser -S appuser
+USER appuser
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 WORKDIR /bin
@@ -47,9 +57,8 @@ ENV TTL_SECONDS_AFTER_WORKFLOW_FINISH 86400
 
 # NUM_WORKERS indicates now many worker goroutines
 ENV NUM_WORKERS 2
+ENV LOG_LEVEL info
 
-CMD persistence_agent --logtostderr=true --namespace=${NAMESPACE} --ttlSecondsAfterWorkflowFinish=${TTL_SECONDS_AFTER_WORKFLOW_FINISH} --numWorker ${NUM_WORKERS}
+ENV EXECUTIONTYPE Workflow
 
-LABEL name="ds-pipelines-persistenceagent" \
-      summary="DSP persistenceagent"
-
+CMD persistence_agent --logtostderr=true --namespace=${NAMESPACE} --ttlSecondsAfterWorkflowFinish=${TTL_SECONDS_AFTER_WORKFLOW_FINISH} --numWorker ${NUM_WORKERS} --executionType ${EXECUTIONTYPE} --logLevel=${LOG_LEVEL}
