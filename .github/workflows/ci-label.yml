@@ -78,10 +78,10 @@ jobs:
 
           if [ "$all_success" = true ]; then
             echo "All workflows succeeded. Adding 'ci-passed' label."
-            gh pr edit $pr_number --add-label "ci-passed"
+            gh pr edit $pr_number --add-label "ci-passed" --repo $GITHUB_REPOSITORY
           else
             echo "Not all workflows succeeded or were skipped. Exiting."
             exit 1
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PROJECT_EDIT }}
