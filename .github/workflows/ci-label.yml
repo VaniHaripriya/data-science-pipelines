@@ -65,6 +65,10 @@ jobs:
           echo "Branch: $branch_name"
           echo "Workflow: KFP Manifests"
 
+          # Print the latest workflow runs
+          gh run list --workflow "KFP Manifests" --branch "$branch_name" --repo $GITHUB_REPOSITORY
+
+
           # Check the status of the workflow for the given branch
           statuses=$(gh run list --workflow "KFP Manifests" --branch "$branch_name" --json status -q '.[] | .status' --repo $GITHUB_REPOSITORY)
 
