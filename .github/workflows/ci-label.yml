@@ -25,7 +25,12 @@ jobs:
       - name: Get Pull Request Number
         id: get_pr
         run: |
-          echo "PR_NUMBER=$(jq -r .workflow_run.pull_requests[0].number <<< ${{ toJson(github) }})" >> $GITHUB_ENV
+         PR_NUMBER=$(jq -r '.workflow_run.pull_requests[0].number' < $GITHUB_EVENT_PATH)
+         if [ -z "$PR_NUMBER" ]; then
+            echo "Pull Request number could not be determined. Exiting."
+            exit 1
+         fi
+         echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
 
       - name: Check Status of All Workflows
         run: |
