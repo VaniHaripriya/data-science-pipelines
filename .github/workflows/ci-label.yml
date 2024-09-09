@@ -9,8 +9,7 @@ name: CI Status Aggregation
 
 on:
   workflow_run:
-    workflows:
-      - 'KFP Manifests'
+    workflows: ["KFP Manifests"]    
     types:
       - completed
   pull_request:
