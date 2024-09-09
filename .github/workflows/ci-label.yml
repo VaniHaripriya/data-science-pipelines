@@ -9,33 +9,41 @@ name: CI Status Aggregation
 
 on:
   workflow_run:
-    workflows: [      
-      'KFP Manifests'      
-    ]
+    workflows:
+      - 'KFP Manifests'
     types:
       - completed
   pull_request:
     branches:
       - upstream-kubeflow-pipelines-master
 
+permissions:
+  actions: read
+  contents: read
+  deployments: write
+  pull-requests: write
+  statuses: write
+
 jobs:
   check_ci_status:
     runs-on: ubuntu-latest
+
     steps:
       - name: Get Pull Request Number
         id: get_pr
         run: |
-          PR_NUMBER=$(jq -r '.workflow_run.pull_requests[0].number' < $GITHUB_EVENT_PATH)
-          BRANCH_NAME=$(jq -r '.workflow_run.head_branch' < $GITHUB_EVENT_PATH)
-
-          if [ -z "$PR_NUMBER" ] || [ -z "$BRANCH_NAME" ]; then
+          # Extract PR number and branch name from the workflow_run event
+          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number || '0' }}"
+          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          
+          # Check if PR_NUMBER and BRANCH_NAME are valid
+          if [ "$PR_NUMBER" == "0" ] || [ -z "$BRANCH_NAME" ]; then
             echo "Pull Request number or branch could not be determined. Exiting."
-          exit 1
+            exit 1
           fi
 
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-
 
       - name: Check Status of All Workflows
         run: |
