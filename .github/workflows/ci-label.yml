@@ -39,7 +39,7 @@ jobs:
         id: set-vars
         run: |
           PR_NUMBER=$(jq -r '.pull_request.number' < $GITHUB_EVENT_PATH)
-          BRANCH_NAME=$(jq -r '.base.ref' < $GITHUB_EVENT_PATH)
+          BRANCH_NAME=$(jq -r '.pull_request.base.ref' < $GITHUB_EVENT_PATH)
 
           # Print PR_NUMBER and BRANCH_NAME for debugging
           echo "PR_NUMBER=$PR_NUMBER"
