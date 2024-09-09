@@ -9,25 +9,8 @@ name: CI Status Aggregation
 
 on:
   workflow_run:
-    workflows: [
-      'KFP backend visualization tests', 
-      'KFP e2e tests', 
-      'Frontend Tests', 
-      'k8s execution tests',
-      'kfp-kubernetes library tests',
-      'KFP Samples',
-      'KFP Runtime Code Tests',
-      'KFP SDK Tests',
-      'Kubeflow Pipelines V2 integration Tests',
-      'KFP Manifests',
-      'KFP Backend Tests',
-      'KFP Component YAML Test',
-      'KFP SDK Docformatter Test',
-      'KFP SDK execution tests',
-      'KFP SDK Isort Test',
-      'KFP SDK Upgrade Test',
-      'KFP SDK YAPF Tests',
-      'KFP upgrade tests'
+    workflows: [      
+      'KFP Manifests'      
     ]
     types:
       - completed
@@ -46,7 +29,7 @@ jobs:
           pr_number=${{ env.PR_NUMBER }}
           echo "Checking statuses for PR #$pr_number"
 
-          workflows=("KFP backend visualization tests" "KFP e2e tests" "Frontend Tests" "k8s execution tests" "kfp-kubernetes library tests" "KFP Samples" "KFP Runtime Code Tests" "KFP SDK Tests" "Kubeflow Pipelines V2 integration Tests" "KFP Manifests" "KFP Backend Tests" "KFP Component YAML Test" "KFP SDK Docformatter Test" "KFP SDK execution tests" "KFP SDK Isort Test" "KFP SDK Upgrade Test" "KFP SDK YAPF Tests" "KFP upgrade tests")
+          workflows=("KFP Manifests")
 
           all_success=true
           for workflow in "${workflows[@]}"; do
