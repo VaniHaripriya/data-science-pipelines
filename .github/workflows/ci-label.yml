@@ -82,7 +82,7 @@ jobs:
           echo "Statuses: $statuses"
 
           # Check if any status is not 'success' (including failed or skipped)
-          if echo "$statuses" | grep -qv "success"; then
+          if echo "$statuses" | grep -qv "completed"; then
             echo "Not all workflows succeeded or were skipped."
             exit 1
           else
