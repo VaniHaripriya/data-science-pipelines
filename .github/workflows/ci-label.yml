@@ -14,6 +14,9 @@ on:
     ]
     types:
       - completed
+  pull_request:
+    branches:
+      - upstream-kubeflow-pipelines-master
 
 jobs:
   check_ci_status:
