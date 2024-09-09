@@ -60,28 +60,24 @@ jobs:
           branch_name=${{ env.BRANCH_NAME }}
           echo "Checking statuses for PR #$pr_number on branch $branch_name"
 
-          workflows=("KFP Manifests")
-          all_success=true
+          # Print debug information
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Branch: $branch_name"
+          echo "Workflow: KFP Manifests"
 
-          for workflow in "${workflows[@]}"; do
-            echo "Checking status for workflow: $workflow"
+          # Check the status of the workflow for the given branch
+          statuses=$(gh run list --workflow "KFP Manifests" --branch "$branch_name" --json status -q '.[] | .status' --repo $GITHUB_REPOSITORY)
 
-            # Check the status of the workflow for the given branch
-            statuses=$(gh run list --workflow "$workflow" --branch "$branch_name" --json status -q '.[] | .status')
+          # Print statuses for debugging
+          echo "Statuses: $statuses"
 
-            # Check if any status is not 'success' (including failed or skipped)
-            if echo "$statuses" | grep -qv "success"; then
-              all_success=false
-              break
-            fi
-          done
-
-          if [ "$all_success" = true ]; then
+          # Check if any status is not 'success' (including failed or skipped)
+          if echo "$statuses" | grep -qv "success"; then
+            echo "Not all workflows succeeded or were skipped."
+            exit 1
+          else
             echo "All workflows succeeded. Adding 'ci-passed' label."
             gh pr edit $pr_number --add-label "ci-passed" --repo $GITHUB_REPOSITORY
-          else
-            echo "Not all workflows succeeded or were skipped. Exiting."
-            exit 1
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_PROJECT_EDIT }}
+    env:
+     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
