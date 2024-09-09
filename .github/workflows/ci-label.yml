@@ -17,13 +17,6 @@ on:
     branches:
       - upstream-kubeflow-pipelines-master
 
-permissions:
-  actions: read
-  contents: read
-  deployments: write
-  pull-requests: write
-  statuses: write
-
 jobs:
   check_ci_status:
     runs-on: ubuntu-latest
