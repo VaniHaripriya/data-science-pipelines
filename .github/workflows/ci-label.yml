@@ -48,7 +48,7 @@ jobs:
           fi
 
           # Safely set the environment variable
-          echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | jq -R -s '. | split("\n") | map(select(length > 0)) | .[]')" >> $GITHUB_ENV
+          echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
 
 
       - name: Wait for All Triggered Workflows to Complete
