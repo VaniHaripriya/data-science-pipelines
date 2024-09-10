@@ -50,11 +50,21 @@ jobs:
           echo "Repository: $GITHUB_REPOSITORY"
           echo "Workflow: KFP Manifests"
 
-          # Print the latest workflow runs for the PR
-          gh run list --workflow "KFP Manifests" --repo $GITHUB_REPOSITORY
-          gh run list --workflow "KFP Manifests" --json number,headSha,status --repo $GITHUB_REPOSITORY
-          # Check the status of the workflow for the given PR
-          statuses=$(gh run list --workflow "KFP Manifests" --json status,headSha --repo $GITHUB_REPOSITORY | jq -r --arg pr_number "$pr_number" '.[] | select(.headSha == $pr_number) | .status')
+          # Get the list of workflow runs with JSON output
+          workflow_runs=$(gh run list --workflow "KFP Manifests" --json number,headSha,status --repo $GITHUB_REPOSITORY)
+
+          # Print the workflow runs for debugging
+          echo "$workflow_runs"
+
+          # Extract the SHA of the PR
+          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid)
+
+          # Print the SHA for debugging
+          echo "PR SHA: $pr_sha"
+
+          # Filter the workflow runs for the specific PR SHA
+          statuses=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
+
 
           # Print statuses
           echo "Statuses: $statuses"
