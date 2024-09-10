@@ -20,12 +20,6 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: Print Full Event Payload
-        id: print-event
-        run: |
-          echo "Full event payload:"
-          cat $GITHUB_EVENT_PATH
-
       - name: Set PR_NUMBER
         id: set-vars
         run: |
@@ -49,22 +43,16 @@ jobs:
       
           echo "Repository: $GITHUB_REPOSITORY"
           echo "Workflow: KFP Manifests"
-
-          # Get the list of workflow runs with JSON output
-          workflow_runs=$(gh run list --workflow "KFP Manifests" --json number,headSha,status --repo $GITHUB_REPOSITORY)
-
-          # Print the workflow runs for debugging
-          echo "$workflow_runs"
-
+          
           # Extract the SHA of the PR
-          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
+          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)   
 
-          # Print the SHA for debugging
-          echo "PR SHA: $pr_sha"
+          # Filter the workflow run for the specific PR SHA and print it
+          echo "Workflow Run Matching PR SHA:"
+          echo "$workflow_runs" | jq --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha)'      
 
           # Filter the workflow runs for the specific PR SHA
           statuses=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
-
 
           # Print statuses
           echo "Statuses: $statuses"
