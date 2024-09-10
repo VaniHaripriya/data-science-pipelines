@@ -57,7 +57,7 @@ jobs:
           echo "$workflow_runs"
 
           # Extract the SHA of the PR
-          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid)
+          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
 
           # Print the SHA for debugging
           echo "PR SHA: $pr_sha"
