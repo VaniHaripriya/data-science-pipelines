@@ -9,8 +9,9 @@ name: CI Status Aggregation
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-
+    types: [opened, synchronize, reopened]    
+env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 jobs:
   check_ci_status:
     runs-on: ubuntu-latest
@@ -47,9 +48,8 @@ jobs:
             exit 0
           fi
 
-          # Safely set the environment variable
-          echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
-
+          # Set the environment variable
+          echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | tr '\n' ',')" >> $GITHUB_ENV
 
       - name: Wait for All Triggered Workflows to Complete
         run: |
@@ -106,6 +106,4 @@ jobs:
           else
             echo "Not all workflows succeeded."
             exit 1
-          fi
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fi   
