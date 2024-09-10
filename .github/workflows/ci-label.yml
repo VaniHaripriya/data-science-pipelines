@@ -44,8 +44,14 @@ jobs:
           echo "Repository: $GITHUB_REPOSITORY"
           echo "Workflow: KFP Manifests"
           
+          # Get the list of workflow runs
+          workflow_runs=$(gh run list --workflow "KFP Manifests" --json number,headSha,status --repo $GITHUB_REPOSITORY)
+
           # Extract the SHA of the PR
           pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)   
+
+          # Print the SHA for debugging
+          echo "PR SHA: $pr_sha"
 
           # Filter the workflow run for the specific PR SHA and print it
           echo "Workflow Run Matching PR SHA:"
