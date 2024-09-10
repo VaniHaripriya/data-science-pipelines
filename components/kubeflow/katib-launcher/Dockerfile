@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM python:3.6
+FROM python:3.12.5
 
 ENV APP_HOME /app
 WORKDIR ${APP_HOME}
