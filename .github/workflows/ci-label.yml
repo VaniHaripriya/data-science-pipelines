@@ -9,16 +9,32 @@ name: CI Status Aggregation
 
 on:
   workflow_run:
-    workflows: ["KFP Manifests"]
+    workflows: [
+      'KFP backend visualization tests', 
+      'KFP e2e tests', 
+      'Frontend Tests', 
+      'k8s execution tests',
+      'kfp-kubernetes library tests',
+      'KFP Samples',
+      'KFP Runtime Code Tests',
+      'KFP SDK Tests',
+      'Kubeflow Pipelines V2 integration Tests',
+      'KFP Manifests',
+      'KFP Backend Tests',
+      'KFP Component YAML Test',
+      'KFP SDK Docformatter Test',
+      'KFP SDK execution tests',
+      'KFP SDK Isort Test',
+      'KFP SDK Upgrade Test',
+      'KFP SDK YAPF Tests',
+      'KFP upgrade tests'
+    ]
     types:
       - completed
 
 jobs:
   check_ci_status:
     runs-on: ubuntu-latest
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Set PR_NUMBER
         id: set-vars
@@ -40,36 +56,70 @@ jobs:
         run: |
           pr_number=${{ env.PR_NUMBER }}
           echo "Checking statuses for PR #$pr_number"
-      
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Workflow: KFP Manifests"
-          
-          # Get the list of workflow runs
-          workflow_runs=$(gh run list --workflow "KFP Manifests" --json number,headSha,status --repo $GITHUB_REPOSITORY)
 
-          # Extract the SHA of the PR
-          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)   
+          workflows=(
+            'KFP backend visualization tests'
+            'KFP e2e tests'
+            'Frontend Tests'
+            'k8s execution tests'
+            'kfp-kubernetes library tests'
+            'KFP Samples'
+            'KFP Runtime Code Tests'
+            'KFP SDK Tests'
+            'Kubeflow Pipelines V2 integration Tests'
+            'KFP Manifests'
+            'KFP Backend Tests'
+            'KFP Component YAML Test'
+            'KFP SDK Docformatter Test'
+            'KFP SDK execution tests'
+            'KFP SDK Isort Test'
+            'KFP SDK Upgrade Test'
+            'KFP SDK YAPF Tests'
+            'KFP upgrade tests'
+          )
 
-          # Print the SHA for debugging
-          echo "PR SHA: $pr_sha"
+          all_completed=true
+          all_succeeded=true
 
-          # Filter the workflow run for the specific PR SHA and print it
-          echo "Workflow Run Matching PR SHA:"
-          echo "$workflow_runs" | jq --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha)'      
+          # Loop through each workflow and check if it is completed
+          for workflow in "${workflows[@]}"; do
+            echo "Checking workflow: $workflow"
+            workflow_runs=$(gh run list --workflow "$workflow" --json number,headSha,status,conclusion --repo $GITHUB_REPOSITORY)
 
-          # Filter the workflow runs for the specific PR SHA
-          statuses=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
+            # Extract the SHA of the PR
+            pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
 
-          # Print statuses
-          echo "Statuses: $statuses"
+            # Filter the workflow runs for the specific PR SHA
+            status=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
+            conclusion=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
 
-          # Check if any status is not 'success'
-          if echo "$statuses" | grep -qv "completed"; then
-            echo "Not all workflows succeeded or were skipped."
-            exit 1
-          else
+            # Print status for each workflow
+            echo "Status for $workflow: $status (Conclusion: $conclusion)"
+
+            # Check if the workflow is not completed yet
+            if [ "$status" != "completed" ]; then
+              all_completed=false
+            fi
+
+            # Check if the workflow did not succeed
+            if [ "$conclusion" != "success" ]; then
+              all_succeeded=false
+            fi
+          done
+
+          # Exit if any workflows are still running
+          if [ "$all_completed" = false ]; then
+            echo "Not all workflows have completed yet. Waiting for all workflows to finish."
+            exit 0
+          fi
+
+          # Check if all workflows succeeded
+          if [ "$all_succeeded" = true ]; then
             echo "All workflows succeeded. Adding 'ci-passed' label."
             gh pr edit $pr_number --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+          else
+            echo "Not all workflows succeeded."
+            exit 1
           fi
     env:
-     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
