@@ -5,7 +5,8 @@
 # If any workflow has failed or was skipped, the 'ci-passed' label is not added.
 # You can modify the list of workflows in this file to match the relevant workflows in your CI pipeline.
 
-name: CI Status Aggregation
+name: Debug workflow_run
+
 on:
   workflow_run:
     workflows: ["KFP Manifests"]
@@ -13,65 +14,8 @@ on:
       - completed
 
 jobs:
-  check_ci_status:
+  print:
     runs-on: ubuntu-latest
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: Print Full Event Payload
-        id: print-event
-        run: |
-          echo "Full event payload:"
-          cat $GITHUB_EVENT_PATH
-
-      - name: Set PR_NUMBER and BRANCH_NAME
-        id: set-vars
-        run: |
-          PR_NUMBER=$(jq -r '.pull_request.number' < $GITHUB_EVENT_PATH)
-          BRANCH_NAME=$(jq -r '.pull_request.base.ref' < $GITHUB_EVENT_PATH)
-
-          # Print PR_NUMBER and BRANCH_NAME for debugging
-          echo "PR_NUMBER=$PR_NUMBER"
-          echo "BRANCH_NAME=$BRANCH_NAME"
-
-          # Check if PR_NUMBER and BRANCH_NAME are valid
-          if [ -z "$PR_NUMBER" ] || [ -z "$BRANCH_NAME" ]; then
-            echo "Pull Request number or branch could not be determined. Exiting."
-            exit 1
-          fi
-
-          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-
-      - name: Check Status of All Workflows
-        run: |
-          pr_number=${{ env.PR_NUMBER }}
-          branch_name=${{ env.BRANCH_NAME }}
-          echo "Checking statuses for PR #$pr_number on branch $branch_name"
-
-          # Print debug information
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Branch: $branch_name"
-          echo "Workflow: KFP Manifests"
-
-          # Print the latest workflow runs
-          gh run list --workflow "KFP Manifests" --branch "$branch_name" --repo $GITHUB_REPOSITORY
-
-
-          # Check the status of the workflow for the given branch
-          statuses=$(gh run list --workflow "KFP Manifests" --branch "$branch_name" --json status -q '.[] | .status' --repo $GITHUB_REPOSITORY)
-
-          # Print statuses for debugging
-          echo "Statuses: $statuses"
-
-          # Check if any status is not 'success' (including failed or skipped)
-          if echo "$statuses" | grep -qv "completed"; then
-            echo "Not all workflows succeeded or were skipped."
-            exit 1
-          else
-            echo "All workflows succeeded. Adding 'ci-passed' label."
-            gh pr edit $pr_number --add-label "ci-passed" --repo $GITHUB_REPOSITORY
-          fi
-    env:
-     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+      - name: Print event payload
+        run: cat $GITHUB_EVENT_PATH
