@@ -1,0 +1,21 @@
+# This workflow aggregates the status of multiple CI workflows associated with a pull request (PR).
+# It is triggered when any of the specified workflows complete.
+# The workflow checks the status of all relevant CI workflows, and if they have all succeeded,
+# it adds a 'ci-passed' label to the PR.
+# If any workflow has failed or was skipped, the 'ci-passed' label is not added.
+# You can modify the list of workflows in this file to match the relevant workflows in your CI pipeline.
+
+name: Debug workflow_run
+
+on:
+  workflow_run:
+    workflows: ["KFP Manifests"]
+    types:
+      - completed
+
+jobs:
+  print:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print event payload
+        run: cat $GITHUB_EVENT_PATH
