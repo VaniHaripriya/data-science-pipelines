@@ -8,29 +8,8 @@
 name: CI Status Aggregation
 
 on:
-  workflow_run:
-    workflows: [
-      'KFP backend visualization tests', 
-      'KFP e2e tests', 
-      'Frontend Tests', 
-      'k8s execution tests',
-      'kfp-kubernetes library tests',
-      'KFP Samples',
-      'KFP Runtime Code Tests',
-      'KFP SDK Tests',
-      'Kubeflow Pipelines V2 integration Tests',
-      'KFP Manifests',
-      'KFP Backend Tests',
-      'KFP Component YAML Test',
-      'KFP SDK Docformatter Test',
-      'KFP SDK execution tests',
-      'KFP SDK Isort Test',
-      'KFP SDK Upgrade Test',
-      'KFP SDK YAPF Tests',
-      'KFP upgrade tests'
-    ]
-    types:
-      - completed
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   check_ci_status:
@@ -39,81 +18,86 @@ jobs:
       - name: Set PR_NUMBER
         id: set-vars
         run: |
-          PR_NUMBER=$(jq -r '.workflow_run.pull_requests[0].number' < $GITHUB_EVENT_PATH)
-
-          # Print PR_NUMBER
+          PR_NUMBER=${{ github.event.number }}
           echo "PR_NUMBER=$PR_NUMBER"
-
-          # Check if PR_NUMBER is valid
-          if [ -z "$PR_NUMBER" ]; then
-            echo "Pull Request number could not be determined. Exiting."
-            exit 1
-          fi
-
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
 
-      - name: Check Status of All Workflows
+      - name: Identify Triggered Workflows
+        id: identify-triggered
         run: |
           pr_number=${{ env.PR_NUMBER }}
-          echo "Checking statuses for PR #$pr_number"
+          echo "Checking which workflows were triggered for PR #$pr_number"
 
-          workflows=(
-            'KFP backend visualization tests'
-            'KFP e2e tests'
-            'Frontend Tests'
-            'k8s execution tests'
-            'kfp-kubernetes library tests'
-            'KFP Samples'
-            'KFP Runtime Code Tests'
-            'KFP SDK Tests'
-            'Kubeflow Pipelines V2 integration Tests'
-            'KFP Manifests'
-            'KFP Backend Tests'
-            'KFP Component YAML Test'
-            'KFP SDK Docformatter Test'
-            'KFP SDK execution tests'
-            'KFP SDK Isort Test'
-            'KFP SDK Upgrade Test'
-            'KFP SDK YAPF Tests'
-            'KFP upgrade tests'
-          )
+          # Fetch all workflow runs for the PR
+          workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
 
-          all_completed=true
-          all_succeeded=true
+          # Extract the SHA of the PR
+          pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
 
-          # Loop through each workflow and check if it is completed
-          for workflow in "${workflows[@]}"; do
-            echo "Checking workflow: $workflow"
-            workflow_runs=$(gh run list --workflow "$workflow" --json number,headSha,status,conclusion --repo $GITHUB_REPOSITORY)
+          # Filter workflow runs for the specific PR SHA and get only the ones that were triggered
+          triggered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name')
 
-            # Extract the SHA of the PR
-            pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
+          # Print all triggered workflows
+          echo "Triggered workflows:"
+          echo "$triggered_workflows"
 
-            # Filter the workflow runs for the specific PR SHA
-            status=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
-            conclusion=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
-
-            # Print status for each workflow
-            echo "Status for $workflow: $status (Conclusion: $conclusion)"
-
-            # Check if the workflow is not completed yet
-            if [ "$status" != "completed" ]; then
-              all_completed=false
-            fi
-
-            # Check if the workflow did not succeed
-            if [ "$conclusion" != "success" ]; then
-              all_succeeded=false
-            fi
-          done
-
-          # Exit if any workflows are still running
-          if [ "$all_completed" = false ]; then
-            echo "Not all workflows have completed yet. Waiting for all workflows to finish."
+          # Check if there are triggered workflows
+          if [ -z "$triggered_workflows" ]; then
+            echo "No workflows were triggered for this PR. Exiting."
             exit 0
           fi
 
-          # Check if all workflows succeeded
+          echo "TRIGGERED_WORKFLOWS=$triggered_workflows" >> $GITHUB_ENV
+
+      - name: Wait for All Triggered Workflows to Complete
+        run: |
+          pr_number=${{ env.PR_NUMBER }}
+          echo "Waiting for all triggered workflows to complete for PR #$pr_number"
+
+          all_completed=false
+
+          while [ "$all_completed" = false ]; do
+            all_completed=true
+            for workflow in ${{ env.TRIGGERED_WORKFLOWS }}; do
+              echo "Checking status for workflow: $workflow"
+              
+              # Get the latest status of the workflow run for this PR
+              status=$(gh run list --workflow "$workflow" --json status,conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
+
+              if [ "$status" != "completed" ]; then
+                all_completed=false
+                echo "Workflow $workflow is still running. Waiting..."
+                break
+              fi
+            done
+
+            if [ "$all_completed" = false ]; then
+              # Sleep for a short duration before checking again
+              sleep 30
+            fi
+          done
+
+          echo "All triggered workflows have completed."
+
+      - name: Check Status of All Completed Workflows
+        run: |
+          pr_number=${{ env.PR_NUMBER }}
+          echo "Checking the conclusions of all completed workflows for PR #$pr_number"
+          
+          all_succeeded=true
+          
+          for workflow in ${{ env.TRIGGERED_WORKFLOWS }}; do
+            echo "Checking conclusion for workflow: $workflow"
+            
+            conclusion=$(gh run list --workflow "$workflow" --json conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
+            
+            if [ "$conclusion" != "success" ]; then
+              all_succeeded=false
+            fi
+            
+            echo "Conclusion for $workflow: $conclusion"
+          done
+
           if [ "$all_succeeded" = true ]; then
             echo "All workflows succeeded. Adding 'ci-passed' label."
             gh pr edit $pr_number --add-label "ci-passed" --repo $GITHUB_REPOSITORY
