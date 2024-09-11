@@ -35,6 +35,8 @@ jobs:
           # Extract the SHA of the PR
           pr_sha=$(gh pr view $pr_number --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
 
+          echo "PR SHA: $pr_sha"
+
           # Filter workflow runs for the specific PR SHA and get only the ones that were triggered
           triggered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name')
 
