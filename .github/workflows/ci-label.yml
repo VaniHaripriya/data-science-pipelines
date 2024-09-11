@@ -38,9 +38,12 @@ jobs:
           # Filter workflow runs for the specific PR SHA and get only the ones that were triggered
           triggered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name')
 
+          # Exclude the 'CI Status Aggregation' workflow from the list
+          filtered_workflows=$(echo "$triggered_workflows" | grep -v '^CI Status Aggregation$')
+
           # Print all triggered workflows
-          echo "Triggered workflows:"
-          echo "$triggered_workflows"
+          echo "Triggered workflows (excluding 'CI Status Aggregation'):"
+          echo "$filtered_workflows"
 
           # Check if there are triggered workflows
           if [ -z "$triggered_workflows" ]; then
