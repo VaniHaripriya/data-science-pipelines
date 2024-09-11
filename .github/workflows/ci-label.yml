@@ -74,13 +74,11 @@ jobs:
                 all_completed=false
                 echo "Workflow \"$workflow\" is still running. Waiting..."
                 break
+              elif [ "$conclusion" != "success" ]; then
+                all_completed=false
+                echo "Workflow \"$workflow\" failed. Exiting."
+                exit 1
               fi
-            done
-
-            if [ "$all_completed" = false ]; then
-              # Sleep for a short duration before checking again
-              sleep 30
-            fi
           done
 
           echo "All triggered workflows have completed."
