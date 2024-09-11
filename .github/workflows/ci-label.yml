@@ -11,7 +11,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]    
 env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 jobs:
   check_ci_status:
     runs-on: ubuntu-latest
@@ -46,13 +46,13 @@ jobs:
           echo "$filtered_workflows"
 
           # Check if there are triggered workflows
-          if [ -z "$triggered_workflows" ]; then
+          if [ -z "$filtered_workflows" ]; then
             echo "No workflows were triggered for this PR. Exiting."
             exit 0
           fi
 
           # Safely set the environment variable
-          echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
+          echo "TRIGGERED_WORKFLOWS=$(echo "$filtered_workflows" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
 
       - name: Wait for All Triggered Workflows to Complete
         run: |
@@ -69,6 +69,7 @@ jobs:
               
               # Get the latest status of the workflow run for this PR
               status=$(gh run list --workflow "$workflow" --json status,conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
+              conclusion=$(gh run list --workflow "$workflow" --json conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
 
               if [ "$status" != "completed" ]; then
                 all_completed=false
@@ -79,6 +80,12 @@ jobs:
                 echo "Workflow \"$workflow\" failed. Exiting."
                 exit 1
               fi
+            done
+
+            if [ "$all_completed" = false ]; then
+              # Sleep for a short duration before checking again
+              sleep 30
+            fi
           done
 
           echo "All triggered workflows have completed."
