@@ -55,7 +55,7 @@ jobs:
 
           # Safely set the environment variable
           echo "TRIGGERED_WORKFLOWS=$(echo "$filtered_workflows" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
-
+          echo "TRIGGERED_WORKFLOWS: $TRIGGERED_WORKFLOWS"
       - name: Wait for All Triggered Workflows to Complete
         run: |
           pr_number=${{ env.PR_NUMBER }}
