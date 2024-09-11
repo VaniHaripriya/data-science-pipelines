@@ -44,8 +44,8 @@ jobs:
           triggered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | {name, status, conclusion, headSha}')
 
           # Exclude the 'CI Status Aggregation' workflow from the list
-          filtered_workflows=$(echo "$triggered_workflows" | grep -v '^CI Status Aggregation$')
-
+          filtered_workflows=$(echo "$triggered_workflows" | grep -v -E '^CI Status Aggregation$|^Trigger PR CI$')
+          
           # Print all triggered workflows
           echo "Triggered workflows (excluding 'CI Status Aggregation'):"
           echo "$filtered_workflows"
