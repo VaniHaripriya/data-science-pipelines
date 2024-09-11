@@ -24,7 +24,7 @@ jobs:
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
 
           # Extract the SHA of the PR
-          pr_sha=$(gh pr view PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
+          pr_sha=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
 
           # Set PR SHA in environment
           echo "PR SHA: $pr_sha"
