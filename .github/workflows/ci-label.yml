@@ -9,96 +9,53 @@ name: CI Status Aggregation
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]    
+    types: [opened, synchronize, reopened]
+
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
   check_ci_status:
     runs-on: ubuntu-latest
     steps:
-      - name: Set PR_NUMBER
+      - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
           PR_NUMBER=${{ github.event.number }}
-          echo "PR_NUMBER=$PR_NUMBER"
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-
-          # Extract the SHA of the PR
-          pr_sha=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
-
-          # Set PR SHA in environment
-          echo "PR SHA: $pr_sha"
-          echo "PR_SHA=$pr_sha" >> $GITHUB_ENV
+          
+          PR_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
+          echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV
 
       - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
-          pr_number=${{ env.PR_NUMBER }} 
-          pr_sha=${{ env.PR_SHA }}        
-          echo "Checking which workflows were triggered for PR #$pr_number"
+          pr_sha=${{ env.PR_SHA }}
+          
+          workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
+          filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$')
 
-          # Fetch all workflow runs for the PR
-          workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)          
-
-          # Filter workflow runs for the specific PR SHA and print relevant fields
-          triggered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | {name, status, conclusion, headSha}')
-
-          # Extract and format the triggered workflows, excluding 'CI Status Aggregation' and 'Trigger PR CI'
-          filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v -E '^(CI Status Aggregation|Trigger PR CI)$')
-
-
-
-          # Print all triggered workflows
-          echo "Triggered workflows (excluding 'CI Status Aggregation'):"
-          echo "$filtered_workflows"
-
-          # Check if there are triggered workflows
           if [ -z "$filtered_workflows" ]; then
             echo "No workflows were triggered for this PR. Exiting."
             exit 0
           fi
 
-          # Extract and format the triggered workflows, excluding 'CI Status Aggregation'
-          filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$')
-
-          # Format the workflows into a comma-separated list
           filtered_workflows_string=$(echo "$filtered_workflows" | tr '\n' ',' | sed 's/,$//')
-
-          # Set the environment variable
           echo "TRIGGERED_WORKFLOWS=$filtered_workflows_string" >> $GITHUB_ENV
 
-          # Print the value for debugging
-          echo "TRIGGERED_WORKFLOWS: $filtered_workflows_string"
       - name: Wait for All Triggered Workflows to Complete
         run: |
-          pr_number=${{ env.PR_NUMBER }}
           pr_sha=${{ env.PR_SHA }}
-          echo "Waiting for all triggered workflows to complete for PR #$pr_number"
-
           all_completed=false
 
           while [ "$all_completed" = false ]; do
             all_completed=true
             IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
             for workflow in "${workflows[@]}"; do
-              echo "Checking status for workflow: \"$workflow\""
-
-              # Fetch the raw workflow run list for the PR
               raw_response=$(gh run list --workflow "$workflow" --json status,conclusion,headSha --repo $GITHUB_REPOSITORY)
-              echo "Raw response for workflow \"$workflow\": $raw_response"
 
-              # Print the entire workflow object matching the current PR SHA
-              echo "Matching workflows for PR SHA: $pr_sha"
-              echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | {name, status, conclusion, headSha}'
-
-              # Get the latest status and conclusion for the current PR SHA
               status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status' | head -n 1)
               conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
-
-              # Print the status and conclusion for debugging
-              echo "Workflow matching PR SHA: $pr_sha"
-              echo "Status: $status"
-              echo "Conclusion: $conclusion"
 
               if [ -z "$status" ]; then
                 echo "No matching workflow run found for PR SHA: $pr_sha. Exiting..."
@@ -107,17 +64,14 @@ jobs:
 
               if [ "$status" != "completed" ]; then
                 all_completed=false
-                echo "Workflow \"$workflow\" is still running. Waiting..."
                 break
               elif [ "$conclusion" != "success" ]; then
                 all_completed=false
-                echo "Workflow \"$workflow\" failed. Exiting."
                 exit 1
               fi
             done
 
             if [ "$all_completed" = false ]; then
-              # Sleep for a short duration before checking again
               sleep 30
             fi
           done
@@ -126,28 +80,20 @@ jobs:
 
       - name: Check Status of All Completed Workflows
         run: |
-          pr_number=${{ env.PR_NUMBER }}
-          echo "Checking the conclusions of all completed workflows for PR #$pr_number"
-          
+          pr_sha=${{ env.PR_SHA }}
           all_succeeded=true
           
           IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
           for workflow in "${workflows[@]}"; do
-            echo "Checking conclusion for workflow: \"$workflow\""
-            
             conclusion=$(gh run list --workflow "$workflow" --json conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
             
             if [ "$conclusion" != "success" ]; then
               all_succeeded=false
             fi
-            
-            echo "Conclusion for \"$workflow\": $conclusion"
           done
 
           if [ "$all_succeeded" = true ]; then
-            echo "All workflows succeeded. Adding 'ci-passed' label."
-            gh pr edit $pr_number --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+            gh pr edit ${{ github.event.number }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
           else
-            echo "Not all workflows succeeded."
             exit 1
           fi
