@@ -68,7 +68,9 @@ jobs:
                 break
               elif [ "$conclusion" != "success" ]; then
                 all_completed=false
-                failure_reasons+="$workflow failed"                
+                failure_reasons+="$workflow failed"
+                echo -e "Some workflows failed:\n$failure_reasons"   
+                exit 1             
               fi
             done
 
@@ -77,12 +79,7 @@ jobs:
             fi
           done
 
-          echo "All triggered workflows have completed."
-
-          if [ -n "$failure_reasons" ]; then
-            echo -e "Some workflows failed:\n$failure_reasons"
-            exit 1
-          fi
+          echo "All triggered workflows have completed."        
 
       - name: Check Status of All Completed Workflows
         run: |
