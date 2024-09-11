@@ -26,8 +26,7 @@ jobs:
       - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
-          pr_number=${{ env.PR_NUMBER }}
-          pr_sha=${{ env.PR_SHA }}
+          pr_number=${{ env.PR_NUMBER }}         
           echo "Checking which workflows were triggered for PR #$pr_number"
 
           # Fetch all workflow runs for the PR
@@ -70,6 +69,7 @@ jobs:
       - name: Wait for All Triggered Workflows to Complete
         run: |
           pr_number=${{ env.PR_NUMBER }}
+          pr_sha=${{ env.PR_SHA }}
           echo "Waiting for all triggered workflows to complete for PR #$pr_number"
 
           all_completed=false
