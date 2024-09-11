@@ -50,6 +50,10 @@ jobs:
 
           # Set the environment variable
           echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | tr '\n' ',')" >> $GITHUB_ENV
+          
+      - name: Debug TRIGGERED_WORKFLOWS
+        run: |
+          echo "TRIGGERED_WORKFLOWS=${{ env.TRIGGERED_WORKFLOWS }}"
 
       - name: Wait for All Triggered Workflows to Complete
         run: |
