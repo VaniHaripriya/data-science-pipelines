@@ -67,9 +67,7 @@ jobs:
                 all_completed=false
                 break
               elif [ "$conclusion" != "success" ]; then
-                all_completed=false
-                failure_reasons+="$workflow failed"
-                echo -e "Some workflows failed:\n$failure_reasons"   
+                all_completed=false                
                 exit 1             
               fi
             done
