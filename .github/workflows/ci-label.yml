@@ -27,6 +27,7 @@ jobs:
         id: identify-triggered
         run: |
           pr_number=${{ env.PR_NUMBER }}
+          pr_sha=${{ env.PR_SHA }}
           echo "Checking which workflows were triggered for PR #$pr_number"
 
           # Fetch all workflow runs for the PR
