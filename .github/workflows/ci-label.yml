@@ -71,13 +71,18 @@ jobs:
               raw_response=$(gh run list --workflow "$workflow" --json status,conclusion,headSha --repo $GITHUB_REPOSITORY)
               echo "Raw response for workflow \"$workflow\": $raw_response"
 
-              # Get the latest status and conclusion of the workflow run for this PR's head SHA
+              # Get the latest status and conclusion for the current PR SHA
               status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status' | head -n 1)
               conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
 
-               # Print status and conclusion
+              # Print the status and conclusion for debugging
               echo "Workflow \"$workflow\" Status: $status"
               echo "Workflow \"$workflow\" Conclusion: $conclusion"
+
+              if [ -z "$status" ]; then
+                echo "No matching workflow run found for PR SHA: $pr_sha. Exiting..."
+                exit 1
+              fi
 
               if [ "$status" != "completed" ]; then
                 all_completed=false
