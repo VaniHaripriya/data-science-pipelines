@@ -71,6 +71,10 @@ jobs:
               status=$(gh run list --workflow "$workflow" --json status,conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
               conclusion=$(gh run list --workflow "$workflow" --json conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
 
+               # Print status and conclusion
+              echo "Workflow \"$workflow\" Status: $status"
+              echo "Workflow \"$workflow\" Conclusion: $conclusion"
+              
               if [ "$status" != "completed" ]; then
                 all_completed=false
                 echo "Workflow \"$workflow\" is still running. Waiting..."
