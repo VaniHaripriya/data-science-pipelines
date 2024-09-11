@@ -43,8 +43,9 @@ jobs:
           # Filter workflow runs for the specific PR SHA and print relevant fields
           triggered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | {name, status, conclusion, headSha}')
 
-          # Exclude both 'CI Status Aggregation' and 'Trigger PR CI' workflows from the list
-          filtered_workflows=$(echo "$triggered_workflows" | grep -v -E '^(CI Status Aggregation|Trigger PR CI)$')
+          # Extract and format the triggered workflows, excluding 'CI Status Aggregation' and 'Trigger PR CI'
+          filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v -E '^(CI Status Aggregation|Trigger PR CI)$')
+
 
 
           # Print all triggered workflows
