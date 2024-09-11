@@ -48,12 +48,8 @@ jobs:
             exit 0
           fi
 
-          # Set the environment variable
+          # Safely set the environment variable
           echo "TRIGGERED_WORKFLOWS=$(echo "$triggered_workflows" | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_ENV
-
-      - name: Debug TRIGGERED_WORKFLOWS
-        run: |
-          echo "TRIGGERED_WORKFLOWS=${{ env.TRIGGERED_WORKFLOWS }}"
 
       - name: Wait for All Triggered Workflows to Complete
         run: |
@@ -64,15 +60,16 @@ jobs:
 
           while [ "$all_completed" = false ]; do
             all_completed=true
-            for workflow in ${{ env.TRIGGERED_WORKFLOWS }}; do
-              echo "Checking status for workflow: $workflow"
+            IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
+            for workflow in "${workflows[@]}"; do
+              echo "Checking status for workflow: \"$workflow\""
               
               # Get the latest status of the workflow run for this PR
               status=$(gh run list --workflow "$workflow" --json status,conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status')
 
               if [ "$status" != "completed" ]; then
                 all_completed=false
-                echo "Workflow $workflow is still running. Waiting..."
+                echo "Workflow \"$workflow\" is still running. Waiting..."
                 break
               fi
             done
@@ -92,8 +89,9 @@ jobs:
           
           all_succeeded=true
           
-          for workflow in ${{ env.TRIGGERED_WORKFLOWS }}; do
-            echo "Checking conclusion for workflow: $workflow"
+          IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
+          for workflow in "${workflows[@]}"; do
+            echo "Checking conclusion for workflow: \"$workflow\""
             
             conclusion=$(gh run list --workflow "$workflow" --json conclusion --repo $GITHUB_REPOSITORY | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion')
             
@@ -101,7 +99,7 @@ jobs:
               all_succeeded=false
             fi
             
-            echo "Conclusion for $workflow: $conclusion"
+            echo "Conclusion for \"$workflow\": $conclusion"
           done
 
           if [ "$all_succeeded" = true ]; then
@@ -110,4 +108,4 @@ jobs:
           else
             echo "Not all workflows succeeded."
             exit 1
-          fi   
+          fi
