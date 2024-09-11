@@ -47,6 +47,7 @@ jobs:
         run: |
           pr_sha=${{ env.PR_SHA }}
           all_completed=false
+          failure_reasons=""
 
           while [ "$all_completed" = false ]; do
             all_completed=true
@@ -56,7 +57,8 @@ jobs:
 
               status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status' | head -n 1)
               conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
-
+              conclusion_message=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusionMessage' | head -n 1)
+              
               if [ -z "$status" ]; then
                 echo "No matching workflow run found for PR SHA: $pr_sha. Exiting..."
                 exit 1
@@ -67,7 +69,7 @@ jobs:
                 break
               elif [ "$conclusion" != "success" ]; then
                 all_completed=false
-                exit 1
+                failure_reasons+="$workflow failed: $conclusion_message\n"                
               fi
             done
 
@@ -77,6 +79,11 @@ jobs:
           done
 
           echo "All triggered workflows have completed."
+          
+          if [ -n "$failure_reasons" ]; then
+            echo -e "Some workflows failed:\n$failure_reasons"
+            exit 1
+          fi
 
       - name: Check Status of All Completed Workflows
         run: |
