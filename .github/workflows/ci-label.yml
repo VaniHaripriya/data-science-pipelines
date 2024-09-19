@@ -67,6 +67,11 @@ jobs:
             status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status' | head -n 1)
             conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
 
+            if [ -z "$status" ]; then
+              echo "No matching workflow run found for workflow: $workflow. Exiting..."
+              exit 1
+            fi
+
             if [ "$status" != "completed" ]; then
               echo "$workflow is still in progress. Exiting to check again in the next scheduled run."
               exit 0
