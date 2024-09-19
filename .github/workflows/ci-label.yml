@@ -76,13 +76,13 @@ jobs:
                 echo ${run} | base64 --decode | jq -r ${1}
               }
 
-               run_name=$(_jq '.name')
-               status=$(_jq '.status')
-               conclusion=$(_jq '.conclusion')
+              run_name=$(_jq '.name')
+              status=$(_jq '.status')
+              conclusion=$(_jq '.conclusion')
 
-               echo "Run name: $run_name"
-               echo "Status: $status"
-               echo "Conclusion: $conclusion"
+              echo "Run name: $run_name"
+              echo "Status: $status"
+              echo "Conclusion: $conclusion"
 
               if [ "$status" != "completed" ]; then
                 echo "Workflow '$workflow' is still in progress. Exiting to check again in the next scheduled run."
@@ -99,5 +99,6 @@ jobs:
           echo "All triggered workflows have completed successfully."
 
       - name: Add 'ci-passed' Label to PR
+        if: success()  # Only runs if all previous steps were successful
         run: |
           gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
