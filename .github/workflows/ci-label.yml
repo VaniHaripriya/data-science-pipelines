@@ -99,6 +99,6 @@ jobs:
           echo "All triggered workflows have completed successfully."
 
       - name: Add 'ci-passed' Label to PR
-        if: success()  # Only runs if all previous steps were successful
+        if: ${{ steps.check-status.outcome == 'success' }}
         run: |
           gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
