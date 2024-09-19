@@ -44,6 +44,10 @@ jobs:
         run: |
           pr_sha=${{ env.PR_SHA }}
           
+          # Use gh CLI to list all workflows and their IDs
+          workflows=$(gh workflow list --repo $GITHUB_REPOSITORY --json id,name,path)
+
+          # Filter workflows for the PR's head SHA and not skipped status
           workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
           filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$')
 
@@ -62,7 +66,10 @@ jobs:
 
           IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
           for workflow in "${workflows[@]}"; do
-            raw_response=$(gh run list --workflow "$workflow" --json status,conclusion,headSha --repo $GITHUB_REPOSITORY)
+            
+            workflow_id=$(gh workflow view "$workflow" --repo $GITHUB_REPOSITORY --json id --jq '.id')
+
+            raw_response=$(gh run list --workflow "$workflow_id" --json status,conclusion,headSha --repo $GITHUB_REPOSITORY)
 
             status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status' | head -n 1)
             conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
