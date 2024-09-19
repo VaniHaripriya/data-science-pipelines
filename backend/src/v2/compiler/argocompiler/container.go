@@ -25,6 +25,8 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/v2/component"
 	"github.com/kubeflow/pipelines/kubernetes_platform/go/kubernetesplatform"
 	k8score "k8s.io/api/core/v1"
+	"os"
+	"strconv"
 )
 
 const (
@@ -152,6 +154,7 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 		Container: &k8score.Container{
 			Image:   GetDriverImage(),
 			Command: []string{"driver"},
+			Env:     MLPipelineServiceEnv,
 			Args: []string{
 				"--type", "CONTAINER",
 				"--pipeline_name", c.spec.GetPipelineInfo().GetName(),
@@ -165,10 +168,14 @@ func (c *workflowCompiler) addContainerDriverTemplate() string {
 				"--pod_spec_patch_path", outputPath(paramPodSpecPatch),
 				"--condition_path", outputPath(paramCondition),
 				"--kubernetes_config", inputValue(paramKubernetesConfig),
+				"--mlPipelineServiceTLSEnabled", strconv.FormatBool(c.mlPipelineServiceTLSEnabled),
 			},
 			Resources: driverResources,
 		},
 	}
+
+	ConfigureCABundle(t)
+
 	c.templates[name] = t
 	c.wf.Spec.Templates = append(c.wf.Spec.Templates, *t)
 	return name
@@ -354,7 +361,7 @@ func (c *workflowCompiler) addContainerExecutorTemplate(refName string) string {
 				},
 			},
 			EnvFrom: []k8score.EnvFromSource{metadataEnvFrom},
-			Env:     commonEnvs,
+			Env:     append(commonEnvs, MLPipelineServiceEnv...),
 		},
 	}
 	// Update pod metadata if it defined in the Kubernetes Spec

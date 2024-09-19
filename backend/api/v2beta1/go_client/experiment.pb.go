@@ -112,6 +112,8 @@ type Experiment struct {
 	Namespace string `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// Output. Specifies whether this experiment is in archived or available state.
 	StorageState Experiment_StorageState `protobuf:"varint,6,opt,name=storage_state,json=storageState,proto3,enum=kubeflow.pipelines.backend.api.v2beta1.Experiment_StorageState" json:"storage_state,omitempty"`
+	// Output. The creation time of the last run in this experiment.
+	LastRunCreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_run_created_at,json=lastRunCreatedAt,proto3" json:"last_run_created_at,omitempty"`
 }
 
 func (x *Experiment) Reset() {
@@ -186,6 +188,13 @@ func (x *Experiment) GetStorageState() Experiment_StorageState {
 		return x.StorageState
 	}
 	return Experiment_STORAGE_STATE_UNSPECIFIED
+}
+
+func (x *Experiment) GetLastRunCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastRunCreatedAt
+	}
+	return nil
 }
 
 type CreateExperimentRequest struct {
@@ -775,25 +784,26 @@ var file_backend_api_v2beta1_experiment_proto_goTypes = []interface{}{
 var file_backend_api_v2beta1_experiment_proto_depIdxs = []int32{
 	9,  // 0: kubeflow.pipelines.backend.api.v2beta1.Experiment.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 1: kubeflow.pipelines.backend.api.v2beta1.Experiment.storage_state:type_name -> kubeflow.pipelines.backend.api.v2beta1.Experiment.StorageState
-	1,  // 2: kubeflow.pipelines.backend.api.v2beta1.CreateExperimentRequest.experiment:type_name -> kubeflow.pipelines.backend.api.v2beta1.Experiment
-	1,  // 3: kubeflow.pipelines.backend.api.v2beta1.ListExperimentsResponse.experiments:type_name -> kubeflow.pipelines.backend.api.v2beta1.Experiment
-	2,  // 4: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.CreateExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.CreateExperimentRequest
-	3,  // 5: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.GetExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.GetExperimentRequest
-	4,  // 6: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ListExperiments:input_type -> kubeflow.pipelines.backend.api.v2beta1.ListExperimentsRequest
-	7,  // 7: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ArchiveExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.ArchiveExperimentRequest
-	8,  // 8: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.UnarchiveExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.UnarchiveExperimentRequest
-	6,  // 9: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.DeleteExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.DeleteExperimentRequest
-	1,  // 10: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.CreateExperiment:output_type -> kubeflow.pipelines.backend.api.v2beta1.Experiment
-	1,  // 11: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.GetExperiment:output_type -> kubeflow.pipelines.backend.api.v2beta1.Experiment
-	5,  // 12: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ListExperiments:output_type -> kubeflow.pipelines.backend.api.v2beta1.ListExperimentsResponse
-	10, // 13: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ArchiveExperiment:output_type -> google.protobuf.Empty
-	10, // 14: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.UnarchiveExperiment:output_type -> google.protobuf.Empty
-	10, // 15: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.DeleteExperiment:output_type -> google.protobuf.Empty
-	10, // [10:16] is the sub-list for method output_type
-	4,  // [4:10] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	9,  // 2: kubeflow.pipelines.backend.api.v2beta1.Experiment.last_run_created_at:type_name -> google.protobuf.Timestamp
+	1,  // 3: kubeflow.pipelines.backend.api.v2beta1.CreateExperimentRequest.experiment:type_name -> kubeflow.pipelines.backend.api.v2beta1.Experiment
+	1,  // 4: kubeflow.pipelines.backend.api.v2beta1.ListExperimentsResponse.experiments:type_name -> kubeflow.pipelines.backend.api.v2beta1.Experiment
+	2,  // 5: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.CreateExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.CreateExperimentRequest
+	3,  // 6: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.GetExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.GetExperimentRequest
+	4,  // 7: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ListExperiments:input_type -> kubeflow.pipelines.backend.api.v2beta1.ListExperimentsRequest
+	7,  // 8: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ArchiveExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.ArchiveExperimentRequest
+	8,  // 9: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.UnarchiveExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.UnarchiveExperimentRequest
+	6,  // 10: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.DeleteExperiment:input_type -> kubeflow.pipelines.backend.api.v2beta1.DeleteExperimentRequest
+	1,  // 11: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.CreateExperiment:output_type -> kubeflow.pipelines.backend.api.v2beta1.Experiment
+	1,  // 12: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.GetExperiment:output_type -> kubeflow.pipelines.backend.api.v2beta1.Experiment
+	5,  // 13: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ListExperiments:output_type -> kubeflow.pipelines.backend.api.v2beta1.ListExperimentsResponse
+	10, // 14: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.ArchiveExperiment:output_type -> google.protobuf.Empty
+	10, // 15: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.UnarchiveExperiment:output_type -> google.protobuf.Empty
+	10, // 16: kubeflow.pipelines.backend.api.v2beta1.ExperimentService.DeleteExperiment:output_type -> google.protobuf.Empty
+	11, // [11:17] is the sub-list for method output_type
+	5,  // [5:11] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_backend_api_v2beta1_experiment_proto_init() }

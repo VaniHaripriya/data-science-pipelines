@@ -16,6 +16,7 @@ package objectstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -309,4 +310,84 @@ func getS3BucketCredential(
 		return cred, err
 	}
 	return nil, fmt.Errorf("could not find specified keys '%s' or '%s'", bucketAccessKeyKey, bucketSecretKeyKey)
+}
+
+type SessionInfo struct {
+	Region       string
+	Endpoint     string
+	DisableSSL   bool
+	SecretName   string
+	AccessKeyKey string
+	SecretKeyKey string
+}
+
+func createBucketSession(sessionInfo *SessionInfo, creds *credentials.Credentials) (*session.Session, error) {
+	if sessionInfo == nil {
+		return nil, nil
+	}
+	config := &aws.Config{}
+	config.Credentials = creds
+	config.Region = aws.String(sessionInfo.Region)
+	config.DisableSSL = aws.Bool(sessionInfo.DisableSSL)
+	config.S3ForcePathStyle = aws.Bool(true)
+	// AWS Specific:
+	// Path-style S3 endpoints, which are commonly used, may fall into either of two subdomains:
+	// 1) s3.amazonaws.com
+	// 2) s3.<AWS Region>.amazonaws.com
+	// for (1) the endpoint is not required, thus we skip it, otherwise the writer will fail to close due to region mismatch.
+	// https://aws.amazon.com/blogs/infrastructure-and-automation/best-practices-for-using-amazon-s3-endpoints-in-aws-cloudformation-templates/
+	// https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
+	awsEndpoint, _ := regexp.MatchString(`^(https://)?s3.amazonaws.com`, strings.ToLower(sessionInfo.Endpoint))
+	if !awsEndpoint {
+		config.Endpoint = aws.String(sessionInfo.Endpoint)
+	}
+	sess, err := session.NewSession(config)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create session to access minio: %v", err)
+	}
+	return sess, nil
+}
+
+func getBucketCredential(
+	ctx context.Context,
+	clientSet kubernetes.Interface,
+	namespace string,
+	secretName string,
+	bucketSecretKeyKey string,
+	bucketAccessKeyKey string,
+) (cred *credentials.Credentials, err error) {
+	defer func() {
+		if err != nil {
+			// wrap error before returning
+			err = fmt.Errorf("Failed to get Bucket credentials from secret name=%q namespace=%q: %w", secretName, namespace, err)
+		}
+	}()
+	secret, err := clientSet.CoreV1().Secrets(namespace).Get(
+		ctx,
+		secretName,
+		metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	accessKey := string(secret.Data[bucketAccessKeyKey])
+	secretKey := string(secret.Data[bucketSecretKeyKey])
+
+	if accessKey != "" && secretKey != "" {
+		cred = credentials.NewStaticCredentials(accessKey, secretKey, "")
+		return cred, err
+	}
+	return nil, fmt.Errorf("could not find specified keys '%s' or '%s'", bucketAccessKeyKey, bucketSecretKeyKey)
+}
+
+func GetSessionInfoFromString(sessionInfoJSON string) (*SessionInfo, error) {
+	sessionInfo := &SessionInfo{}
+	if sessionInfoJSON == "" {
+		return nil, nil
+	}
+	err := json.Unmarshal([]byte(sessionInfoJSON), sessionInfo)
+	if err != nil {
+		return nil, fmt.Errorf("Encountered error when attempting to unmarshall bucket session properties: %w", err)
+	}
+	return sessionInfo, nil
 }

@@ -25,6 +25,107 @@
     "application/json"
   ],
   "paths": {
+    "/apis/v2beta1/artifacts": {
+      "get": {
+        "summary": "Finds all artifacts within the specified namespace.\nNamespace field is required. In multi-user mode, the caller\nis required to have RBAC verb \"list\" on the \"artifacts\"\nresource for the specified namespace.",
+        "operationId": "ListArtifacts",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v2beta1ListArtifactResponse"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "max_result_size",
+            "description": "Optional.\nMax number of resources to return in the result. A value of zero or less\nwill result in the default (20).\nThe API implementation also enforces an upper-bound of 100, and picks the\nminimum between this value and the one specified here.\n[default = 20].",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          },
+          {
+            "name": "order_by_field",
+            "description": "Optional. Ordering field. [default = ID].",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "FIELD_UNSPECIFIED",
+              "CREATE_TIME",
+              "LAST_UPDATE_TIME",
+              "ID"
+            ],
+            "default": "FIELD_UNSPECIFIED"
+          },
+          {
+            "name": "order_by",
+            "description": "Optional. Can be either \"asc\" (ascending) or \"desc\" (descending). [default = asc].",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "next_page_token",
+            "description": "Optional. The next_page_token value returned from a previous List request, if any.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "namespace",
+            "description": "Required. Namespace of the Artifact's context.",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "ArtifactService"
+        ]
+      }
+    },
+    "/apis/v2beta1/artifacts/{artifact_id}": {
+      "get": {
+        "summary": "Finds a specific Artifact by ID.",
+        "operationId": "GetArtifact",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v2beta1Artifact"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "description": "Required. The ID of the artifact to be retrieved.",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "view",
+            "description": "Optional. Set to \"DOWNLOAD\" to included a signed URL with\nan expiry (default 15 seconds, unless configured other wise).\nThis URL can be used to download the Artifact directly from\nthe Artifact's storage provider. Set to \"BASIC\" to exclude\nthe download_url from server responses, thus preventing the\ncreation of any signed url.\nDefaults to BASIC.\n\n - ARTIFACT_VIEW_UNSPECIFIED: Not specified, equivalent to BASIC.\n - BASIC: Server responses excludes download_url\n - DOWNLOAD: Server responses include download_url",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "ARTIFACT_VIEW_UNSPECIFIED",
+              "BASIC",
+              "DOWNLOAD"
+            ],
+            "default": "ARTIFACT_VIEW_UNSPECIFIED"
+          }
+        ],
+        "tags": [
+          "ArtifactService"
+        ]
+      }
+    },
     "/apis/v2beta1/auth": {
       "get": {
         "operationId": "AuthService_Authorize",
@@ -1530,25 +1631,25 @@
     }
   },
   "definitions": {
-    "AuthorizeRequestResources": {
+    "GetArtifactRequestArtifactView": {
       "type": "string",
       "enum": [
-        "UNASSIGNED_RESOURCES",
-        "VIEWERS"
+        "ARTIFACT_VIEW_UNSPECIFIED",
+        "BASIC",
+        "DOWNLOAD"
       ],
-      "default": "UNASSIGNED_RESOURCES",
-      "description": "Type of resources in pipelines system."
+      "default": "ARTIFACT_VIEW_UNSPECIFIED",
+      "title": "- ARTIFACT_VIEW_UNSPECIFIED: Not specified, equivalent to BASIC.\n - BASIC: Server responses excludes download_url\n - DOWNLOAD: Server responses include download_url"
     },
-    "AuthorizeRequestVerb": {
+    "ListArtifactRequestField": {
       "type": "string",
       "enum": [
-        "UNASSIGNED_VERB",
-        "CREATE",
-        "GET",
-        "DELETE"
+        "FIELD_UNSPECIFIED",
+        "CREATE_TIME",
+        "LAST_UPDATE_TIME",
+        "ID"
       ],
-      "default": "UNASSIGNED_VERB",
-      "description": "Type of verbs that act on the resources."
+      "default": "FIELD_UNSPECIFIED"
     },
     "protobufAny": {
       "type": "object",
@@ -1613,6 +1714,11 @@
         "storage_state": {
           "$ref": "#/definitions/v2beta1ExperimentStorageState",
           "description": "Output. Specifies whether this experiment is in archived or available state."
+        },
+        "last_run_created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Output. The creation time of the last run in this experiment."
         }
       }
     },
