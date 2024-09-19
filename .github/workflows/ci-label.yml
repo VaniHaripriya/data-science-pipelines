@@ -45,7 +45,7 @@ jobs:
           pr_sha=${{ env.PR_SHA }}
           
           # Use gh CLI to list all workflows and their IDs
-          workflows=$(gh workflow list --repo $GITHUB_REPOSITORY --json id,name,path)
+          workflows=$(gh api repos/$GITHUB_REPOSITORY/actions/workflows --jq '.workflows[] | {name: .name, id: .id}')
 
           # Filter workflows for the PR's head SHA and not skipped status
           workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
@@ -66,8 +66,8 @@ jobs:
 
           IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
           for workflow in "${workflows[@]}"; do
-            
-            workflow_id=$(gh workflow view "$workflow" --repo $GITHUB_REPOSITORY --json id --jq '.id')
+            # Find the workflow ID using gh api instead of gh workflow view
+            workflow_id=$(gh api repos/$GITHUB_REPOSITORY/actions/workflows --jq ".workflows[] | select(.name == \"$workflow\") | .id")
 
             raw_response=$(gh run list --workflow "$workflow_id" --json status,conclusion,headSha --repo $GITHUB_REPOSITORY)
 
