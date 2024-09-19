@@ -43,11 +43,8 @@ jobs:
         id: identify-triggered
         run: |
           pr_sha=${{ env.PR_SHA }}
+          workflow_runs=$(gh run list --json name,headSha,status,conclusion --repo $GITHUB_REPOSITORY) || { echo "Failed to list workflow runs"; exit 1; }
 
-          # Fetch workflow runs for the current PR SHA
-          workflow_runs=$(gh run list --json name,headSha,status,conclusion --repo $GITHUB_REPOSITORY)
-
-          # Filter workflows triggered by the current PR
           filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" \
             '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$' | sort -u)
 
@@ -56,7 +53,6 @@ jobs:
             exit 0
           fi
 
-          # Convert to a comma-separated string of workflow names
           filtered_workflows_string=$(echo "$filtered_workflows" | tr '\n' ',' | sed 's/,$//')
           echo "TRIGGERED_WORKFLOWS=$filtered_workflows_string" >> $GITHUB_ENV
 
@@ -67,10 +63,8 @@ jobs:
 
           IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
           for workflow in "${workflows[@]}"; do
-            # Get all runs for the current workflow
-            runs=$(gh run list --workflow "$workflow" --json name,headSha,status,conclusion --repo $GITHUB_REPOSITORY)
+            runs=$(gh run list --workflow "$workflow" --json name,headSha,status,conclusion --repo $GITHUB_REPOSITORY) || { echo "Failed to list runs for workflow $workflow"; exit 1; }
 
-            # For each run, check status and conclusion
             for run in $(echo "$runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | @base64'); do
               _jq() {
                 echo ${run} | base64 --decode | jq -r ${1}
@@ -99,6 +93,6 @@ jobs:
           echo "All triggered workflows have completed successfully."
 
       - name: Add 'ci-passed' Label to PR
-        if: ${{ steps.check-status.outcome == 'success' }}
+        if: ${{ success() }}
         run: |
           gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
