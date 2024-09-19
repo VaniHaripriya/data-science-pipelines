@@ -45,7 +45,7 @@ jobs:
           pr_sha=${{ env.PR_SHA }}
 
           # Fetch workflow runs for the current PR SHA
-          workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
+          workflow_runs=$(gh run list --json id,name,headSha,status --repo $GITHUB_REPOSITORY)
 
           # Filter workflows triggered by the current PR
           filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" \
@@ -72,6 +72,7 @@ jobs:
             
             # For each run, get job statuses
             for run_id in $(echo "$runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .id'); do
+              # Get job details for each run
               jobs=$(gh run view "$run_id" --json jobs --repo $GITHUB_REPOSITORY)
 
               # Check job status
