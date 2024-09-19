@@ -88,18 +88,27 @@ jobs:
 
               if [ "$conclusion" != "success" ]; then
                 echo "Workflow '$workflow' failed. Exiting."
-                exit 1
+                all_succeeded=false
+                break 2  # Exit both loops
               fi
             done
           done
 
           if [ "$in_progress" = true ]; then
             echo "Some workflows are still in progress. Exiting the job without marking as success."
+            echo "all_succeeded=false" >> $GITHUB_ENV
             exit 0
           fi
 
-          echo "All triggered workflows have completed successfully."
+          if [ "$all_succeeded" = true ]; then
+            echo "All triggered workflows have completed successfully."
+            echo "all_succeeded=true" >> $GITHUB_ENV
+          else
+            echo "Not all workflows succeeded."
+            echo "all_succeeded=false" >> $GITHUB_ENV
+          fi
+
       - name: Add 'ci-passed' Label to PR
-        if: ${{ success() }}
+        if: ${{ env.all_succeeded == 'true' }}
         run: |
           gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
