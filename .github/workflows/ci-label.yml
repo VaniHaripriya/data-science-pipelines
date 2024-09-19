@@ -57,9 +57,11 @@ jobs:
           echo "TRIGGERED_WORKFLOWS=$filtered_workflows_string" >> $GITHUB_ENV
 
       - name: Check Status and Conclusion of Triggered Workflows
+        id: check-status
         run: |
           pr_sha=${{ env.PR_SHA }}
           all_succeeded=true
+          in_progress=false
 
           IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
           for workflow in "${workflows[@]}"; do
@@ -79,8 +81,9 @@ jobs:
               echo "Conclusion: $conclusion"
 
               if [ "$status" != "completed" ]; then
-                echo "Workflow '$workflow' is still in progress. Exiting to check again in the next scheduled run."
-                exit 0
+                echo "Workflow '$workflow' is still in progress. Skipping to next scheduled run."
+                in_progress=true
+                break 2  # Exit both loops
               fi
 
               if [ "$conclusion" != "success" ]; then
@@ -90,8 +93,12 @@ jobs:
             done
           done
 
-          echo "All triggered workflows have completed successfully."
+          if [ "$in_progress" = true ]; then
+            echo "Some workflows are still in progress. Exiting the job without marking as success."
+            exit 0
+          fi
 
+          echo "All triggered workflows have completed successfully."
       - name: Add 'ci-passed' Label to PR
         if: ${{ success() }}
         run: |
