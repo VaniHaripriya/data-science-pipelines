@@ -39,54 +39,58 @@ jobs:
           PR_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
           echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV
 
-      - name: Identify Triggered Workflows and Jobs
+      - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
           pr_sha=${{ env.PR_SHA }}
-          
+
           # Fetch workflow runs for the current PR SHA
-          workflow_runs=$(gh run list --json name,conclusion,headSha,status,jobs --repo $GITHUB_REPOSITORY)
-          
-          # Filter workflows and jobs triggered by the current PR
+          workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
+
+          # Filter workflows triggered by the current PR
           filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" \
-            '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .jobs[].name' | grep -v '^CI Status Aggregation$')
+            '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$')
 
           if [ -z "$filtered_workflows" ]; then
-            echo "No workflows or jobs were triggered for this PR. Exiting."
+            echo "No workflows were triggered for this PR. Exiting."
             exit 0
           fi
 
-          # Convert to a comma-separated string of workflow jobs
+          # Convert to a comma-separated string of workflow names
           filtered_workflows_string=$(echo "$filtered_workflows" | tr '\n' ',' | sed 's/,$//')
           echo "TRIGGERED_WORKFLOWS=$filtered_workflows_string" >> $GITHUB_ENV
 
-      - name: Check Status and Conclusion of Triggered Workflow Jobs
+      - name: Check Status and Conclusion of Triggered Workflows
         run: |
           pr_sha=${{ env.PR_SHA }}
           all_succeeded=true
 
-          IFS=',' read -ra jobs <<< "${{ env.TRIGGERED_WORKFLOWS }}"
-          for job in "${jobs[@]}"; do
-            # Fetch workflow runs for the current job
-            raw_response=$(gh run list --json status,conclusion,headSha,jobs --repo $GITHUB_REPOSITORY)
+          IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
+          for workflow in "${workflows[@]}"; do
+            # Get all runs for the current workflow
+            runs=$(gh run list --workflow "$workflow" --json id,name,headSha,status,conclusion --repo $GITHUB_REPOSITORY)
+            
+            # For each run, get job statuses
+            for run_id in $(echo "$runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .id'); do
+              jobs=$(gh run view "$run_id" --json jobs --repo $GITHUB_REPOSITORY)
 
-            status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" --arg job "$job" \
-              '.[] | select(.headSha == $pr_sha) | .jobs[] | select(.name == $job) | .status' | head -n 1)
-            conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" --arg job "$job" \
-              '.[] | select(.headSha == $pr_sha) | .jobs[] | select(.name == $job) | .conclusion' | head -n 1)
+              # Check job status
+              job_status=$(echo "$jobs" | jq -r '.jobs[] | select(.headSha == $pr_sha) | .status' | head -n 1)
+              job_conclusion=$(echo "$jobs" | jq -r '.jobs[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
 
-            if [ "$status" != "completed" ]; then
-              echo "$job is still in progress. Exiting to check again in the next scheduled run."
-              exit 0
-            fi
+              if [ "$job_status" != "completed" ]; then
+                echo "Job in workflow '$workflow' is still in progress. Exiting to check again in the next scheduled run."
+                exit 0
+              fi
 
-            if [ "$conclusion" != "success" ]; then
-              echo "$job failed. Exiting."
-              exit 1
-            fi
+              if [ "$job_conclusion" != "success" ]; then
+                echo "Job in workflow '$workflow' failed. Exiting."
+                exit 1
+              fi
+            done
           done
 
-          echo "All triggered workflow jobs have completed successfully."
+          echo "All triggered workflows and jobs have completed successfully."
 
       - name: Add 'ci-passed' Label to PR
         run: |
