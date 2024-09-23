@@ -97,7 +97,7 @@ jobs:
           if [ "$in_progress" = true ]; then
             echo "Some workflows are still in progress. Exiting the job without marking as success."
             echo "all_succeeded=false" >> $GITHUB_ENV
-            exit 0
+            exit 1
           fi
 
           if [ "$all_succeeded" = true ]; then
