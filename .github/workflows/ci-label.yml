@@ -6,11 +6,9 @@
 
 name: CI Status Aggregation
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+on:  
   schedule:
-    - cron: "*/10 * * * *"  # Runs every 10 minutes
+    - cron: "*/5 * * * *"  # Runs every 5 minutes
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,9 +41,10 @@ jobs:
         id: identify-triggered
         run: |
           pr_sha=${{ env.PR_SHA }}
-          
-          workflow_runs=$(gh run list --json name,conclusion,headSha,status --repo $GITHUB_REPOSITORY)
-          filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$')
+          workflow_runs=$(gh run list --json name,headSha,status,conclusion --repo $GITHUB_REPOSITORY) || { echo "Failed to list workflow runs"; exit 1; }
+
+          filtered_workflows=$(echo "$workflow_runs" | jq -r --arg pr_sha "$pr_sha" \
+            '.[] | select(.headSha == $pr_sha) | select(.status != "skipped") | .name' | grep -v '^CI Status Aggregation$' | sort -u)
 
           if [ -z "$filtered_workflows" ]; then
             echo "No workflows were triggered for this PR. Exiting."
@@ -56,30 +55,58 @@ jobs:
           echo "TRIGGERED_WORKFLOWS=$filtered_workflows_string" >> $GITHUB_ENV
 
       - name: Check Status and Conclusion of Triggered Workflows
+        id: check-status
         run: |
           pr_sha=${{ env.PR_SHA }}
           all_succeeded=true
+          in_progress=false
 
           IFS=',' read -ra workflows <<< "${{ env.TRIGGERED_WORKFLOWS }}"
           for workflow in "${workflows[@]}"; do
-            raw_response=$(gh run list --workflow "$workflow" --json status,conclusion,headSha --repo $GITHUB_REPOSITORY)
+            runs=$(gh run list --workflow "$workflow" --json name,headSha,status,conclusion --repo $GITHUB_REPOSITORY) || { echo "Failed to list runs for workflow $workflow"; exit 1; }
 
-            status=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .status' | head -n 1)
-            conclusion=$(echo "$raw_response" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | .conclusion' | head -n 1)
+            for run in $(echo "$runs" | jq -r --arg pr_sha "$pr_sha" '.[] | select(.headSha == $pr_sha) | @base64'); do
+              _jq() {
+                echo ${run} | base64 --decode | jq -r ${1}
+              }
 
-            if [ "$status" != "completed" ]; then
-              echo "$workflow is still in progress. Exiting to check again in the next scheduled run."
-              exit 0
-            fi
+              run_name=$(_jq '.name')
+              status=$(_jq '.status')
+              conclusion=$(_jq '.conclusion')
 
-            if [ "$conclusion" != "success" ]; then
-              echo "$workflow failed. Exiting."
-              exit 1
-            fi
+              echo "Run name: $run_name"
+              echo "Status: $status"
+              echo "Conclusion: $conclusion"
+
+              if [ "$status" != "completed" ]; then
+                echo "Workflow '$workflow' is still in progress. Skipping to next scheduled run."
+                in_progress=true
+                break 2  # Exit both loops
+              fi
+
+              if [ "$conclusion" != "success" ]; then
+                echo "Workflow '$workflow' failed. Exiting."
+                all_succeeded=false
+                break 2  # Exit both loops
+              fi
+            done
           done
 
-          echo "All triggered workflows have completed successfully."
+          if [ "$in_progress" = true ]; then
+            echo "Some workflows are still in progress. Exiting the job without marking as success."
+            echo "all_succeeded=false" >> $GITHUB_ENV
+            exit 1
+          fi
+
+          if [ "$all_succeeded" = true ]; then
+            echo "All triggered workflows have completed successfully."
+            echo "all_succeeded=true" >> $GITHUB_ENV
+          else
+            echo "Not all workflows succeeded."
+            echo "all_succeeded=false" >> $GITHUB_ENV
+          fi
 
       - name: Add 'ci-passed' Label to PR
+        if: ${{ env.all_succeeded == 'true' }}
         run: |
           gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
