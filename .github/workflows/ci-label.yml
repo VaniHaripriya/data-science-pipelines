@@ -6,11 +6,9 @@
 
 name: CI Status Aggregation
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+on:  
   schedule:
-    - cron: "*/5 * * * *"  # Runs every 10 minutes
+    - cron: "*/5 * * * *"  # Runs every 5 minutes
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
