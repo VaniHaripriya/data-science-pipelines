@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-        
+
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
@@ -132,9 +132,9 @@ jobs:
       - name: Update PR Status
         run: |
           if [ "${{ env.all_succeeded }}" == "true" ]; then
-            echo "Setting PR status to success."
-            gh pr edit ${{ env.PR_NUMBER }} --add-status "success" --repo $GITHUB_REPOSITORY
+            echo "All workflows succeeded. Adding comment to PR."
+            gh pr comment ${{ env.PR_NUMBER }} --body "All CI checks passed successfully." --repo $GITHUB_REPOSITORY
           else
-            echo "Setting PR status to failure."
-            gh pr edit ${{ env.PR_NUMBER }} --add-status "failure" --repo $GITHUB_REPOSITORY
+            echo "Not all workflows succeeded. Adding comment to PR."
+            gh pr comment ${{ env.PR_NUMBER }} --body "Some CI checks failed. Please check the workflow runs." --repo $GITHUB_REPOSITORY
           fi
