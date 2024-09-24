@@ -45,12 +45,14 @@ jobs:
       - name: Check if 'ci-passed' Label Already Exists
         id: check-label
         run: |
-          label_exists=$(gh pr view ${{ env.PR_NUMBER }} --json labels --jq '.labels[].name' | grep -c 'ci-passed')
-          if [ "$label_exists" -gt 0 ]; then
+          label_exists=$(gh pr view ${{ env.PR_NUMBER }} --json labels --jq '.labels[].name' | grep 'ci-passed' || true)
+          echo "Existing labels: $label_exists"  # Debugging output
+
+          if [ -n "$label_exists" ]; then
             echo "'ci-passed' label already exists. Exiting."
             exit 1
           fi
-
+          
       - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
