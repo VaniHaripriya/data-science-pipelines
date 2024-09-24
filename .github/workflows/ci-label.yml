@@ -19,6 +19,9 @@ jobs:
   check_ci_status:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
@@ -90,7 +93,7 @@ jobs:
               echo "Conclusion: $conclusion"
 
               if [ "$status" != "completed" ]; then
-                echo "Workflow '$workflow' is still in progress. Skipping to next scheduled run."
+                echo "Workflow '$workflow' is still in progress. Exiting."
                 in_progress=true
                 break 2  # Exit both loops
               fi
@@ -115,6 +118,7 @@ jobs:
           else
             echo "Not all workflows succeeded."
             echo "all_succeeded=false" >> $GITHUB_ENV
+          fi
 
       - name: Add 'ci-passed' Label to PR
         if: ${{ env.all_succeeded == 'true' }}
