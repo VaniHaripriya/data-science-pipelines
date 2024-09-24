@@ -19,9 +19,6 @@ jobs:
   check_ci_status:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
@@ -52,7 +49,7 @@ jobs:
             echo "'ci-passed' label already exists. Exiting."
             exit 1
           fi
-          
+
       - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
@@ -95,7 +92,7 @@ jobs:
               echo "Conclusion: $conclusion"
 
               if [ "$status" != "completed" ]; then
-                echo "Workflow '$workflow' is still in progress. Exiting."
+                echo "Workflow '$workflow' is still in progress. Skipping to next scheduled run."
                 in_progress=true
                 break 2  # Exit both loops
               fi
@@ -108,6 +105,7 @@ jobs:
             done
           done
 
+          # Determine final status
           if [ "$in_progress" = true ]; then
             echo "Some workflows are still in progress. Exiting the job without marking as success."
             echo "all_succeeded=false" >> $GITHUB_ENV
@@ -120,9 +118,20 @@ jobs:
           else
             echo "Not all workflows succeeded."
             echo "all_succeeded=false" >> $GITHUB_ENV
+            exit 1  # Ensure this run fails if not all workflows succeeded
           fi
 
       - name: Add 'ci-passed' Label to PR
         if: ${{ env.all_succeeded == 'true' }}
         run: |
           gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+
+      - name: Update PR Status
+        run: |
+          if [ "${{ env.all_succeeded }}" == "true" ]; then
+            echo "Setting PR status to success."
+            gh pr edit ${{ env.PR_NUMBER }} --add-status "success" --repo $GITHUB_REPOSITORY
+          else
+            echo "Setting PR status to failure."
+            gh pr edit ${{ env.PR_NUMBER }} --add-status "failure" --repo $GITHUB_REPOSITORY
+          fi
