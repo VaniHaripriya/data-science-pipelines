@@ -31,13 +31,22 @@ jobs:
 
           if [ -z "$PR_NUMBER" ]; then
             echo "No open pull request found. Exiting."
-            exit 0
+            exit 1
           fi
 
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
 
           PR_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
           echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV
+
+      - name: Check if 'ci-passed' Label Already Exists
+        id: check-label
+        run: |
+          label_exists=$(gh pr view ${{ env.PR_NUMBER }} --json labels --jq '.labels[].name' | grep -c 'ci-passed')
+          if [ "$label_exists" -gt 0 ]; then
+            echo "'ci-passed' label already exists. Exiting."
+            exit 1
+          fi
 
       - name: Identify Triggered Workflows
         id: identify-triggered
@@ -50,7 +59,7 @@ jobs:
 
           if [ -z "$filtered_workflows" ]; then
             echo "No workflows were triggered for this PR. Exiting."
-            exit 0
+            exit 1
           fi
 
           filtered_workflows_string=$(echo "$filtered_workflows" | tr '\n' ',' | sed 's/,$//')
@@ -106,7 +115,6 @@ jobs:
           else
             echo "Not all workflows succeeded."
             echo "all_succeeded=false" >> $GITHUB_ENV
-          fi
 
       - name: Add 'ci-passed' Label to PR
         if: ${{ env.all_succeeded == 'true' }}
