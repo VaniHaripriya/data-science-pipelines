@@ -1,4 +1,3 @@
-#test
 name: KFP Tekton backend unit tests
 
 on:
