@@ -19,6 +19,9 @@ jobs:
   check_ci_status:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
