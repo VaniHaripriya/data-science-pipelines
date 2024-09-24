@@ -21,6 +21,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      
+      - name: Remove 'ci-passed' Label on PR Synchronize
+        if: ${{ github.event.action == 'synchronize' }}
+        run: |
+          echo "Removing 'ci-passed' label as new changes have been pushed."
+          gh pr edit ${{ github.event.number }} --remove-label "ci-passed" --repo $GITHUB_REPOSITORY || echo "Label not present"
 
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
