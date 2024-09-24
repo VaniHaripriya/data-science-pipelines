@@ -7,10 +7,12 @@
 name: CI Status Aggregation
 
 on:
+  push:
+    branches: [master]
   pull_request:
     types: [opened, synchronize, reopened]
   schedule:
-    - cron: '*/5 * * * *'  # Runs every 5 minutes
+    - cron: '*/10 * * * *'  # Runs every 10 minutes
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -21,6 +23,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+      
+      - name: Remove 'ci-passed' Label on PR Synchronize
+        if: ${{ github.event.action == 'synchronize' }}
+        run: |
+          echo "Removing 'ci-passed' label as new changes have been pushed."
+          gh pr edit ${{ github.event.number }} --remove-label "ci-passed" --repo $GITHUB_REPOSITORY || echo "Label not present"
 
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
@@ -45,12 +53,11 @@ jobs:
       - name: Check if 'ci-passed' Label Already Exists
         id: check-label
         run: |
-          label_exists=$(gh pr view ${{ env.PR_NUMBER }} --json labels --jq '.labels[].name' | grep 'ci-passed' || true)
-          echo "Existing labels: $label_exists"  # Debugging output
+          label_exists=$(gh pr view ${{ env.PR_NUMBER }} --json labels --jq '.labels[].name' | grep 'ci-passed' || true)          
 
           if [ -n "$label_exists" ]; then
             echo "'ci-passed' label already exists. Exiting."
-            exit 1
+            exit 0
           fi
 
       - name: Identify Triggered Workflows
