@@ -60,6 +60,12 @@ jobs:
             exit 0
           fi
 
+      - name: Block Execution of Subsequent Steps if 'ci-passed' Label Exists
+        if: steps.check-label.outputs.exit-code == 0
+        run: |
+          echo "'ci-passed' label exists. Blocking further steps."
+          exit 0 
+          
       - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
@@ -104,13 +110,13 @@ jobs:
               if [ "$status" != "completed" ]; then
                 echo "Workflow '$workflow' is still in progress. Skipping to next scheduled run."
                 in_progress=true
-                break 2  # Exit both loops
+                break 2
               fi
 
               if [ "$conclusion" != "success" ]; then
                 echo "Workflow '$workflow' failed. Exiting."
                 all_succeeded=false
-                break 2  # Exit both loops
+                break
               fi
             done
           done
