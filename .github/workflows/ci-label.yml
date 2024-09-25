@@ -60,6 +60,12 @@ jobs:
             exit 0
           fi
 
+      - name: Block Execution of Subsequent Steps if 'ci-passed' Label Exists
+        if: steps.check-label.outputs.exit-code == 0
+        run: |
+          echo "'ci-passed' label exists. Blocking further steps."
+          exit 0 
+
       - name: Identify Triggered Workflows
         id: identify-triggered
         run: |
@@ -104,13 +110,13 @@ jobs:
               if [ "$status" != "completed" ]; then
                 echo "Workflow '$workflow' is still in progress. Skipping to next scheduled run."
                 in_progress=true
-                break 2  # Exit both loops
+                break 2
               fi
 
               if [ "$conclusion" != "success" ]; then
                 echo "Workflow '$workflow' failed. Exiting."
                 all_succeeded=false
-                break 2  # Exit both loops
+                break
               fi
             done
           done
@@ -128,20 +134,10 @@ jobs:
           else
             echo "Not all workflows succeeded."
             echo "all_succeeded=false" >> $GITHUB_ENV
-            exit 1  # Ensure this run fails if not all workflows succeeded
+            exit 1
           fi
 
       - name: Add 'ci-passed' Label to PR
         if: ${{ env.all_succeeded == 'true' }}
         run: |
-          gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
-
-      - name: Update PR Status
-        run: |
-          if [ "${{ env.all_succeeded }}" == "true" ]; then
-            echo "All workflows succeeded. Adding comment to PR."
-            gh pr comment ${{ env.PR_NUMBER }} --body "All CI checks passed successfully." --repo $GITHUB_REPOSITORY
-          else
-            echo "Not all workflows succeeded. Adding comment to PR."
-            gh pr comment ${{ env.PR_NUMBER }} --body "Some CI checks failed. Please check the workflow runs." --repo $GITHUB_REPOSITORY
-          fi
+          gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY 
