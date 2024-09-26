@@ -7,18 +7,17 @@
 name: CI Status Aggregation
 
 on:
-  push:
-    branches: [master]
+  issue_comment:
+    types: [created]
   pull_request:
-    types: [opened, synchronize, reopened]
-  schedule:
-    - cron: '*/10 * * * *'  # Runs every 10 minutes
+    types: [synchronize]
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   check_ci_status:
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/check-ci')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -33,38 +32,10 @@ jobs:
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            echo "Scheduled run, finding latest open PR."
-            PR_NUMBER=$(gh pr list --state open --json number --jq '.[0].number' --repo $GITHUB_REPOSITORY)
-          else
-            PR_NUMBER=${{ github.event.number }}
-          fi
-
-          if [ -z "$PR_NUMBER" ]; then
-            echo "No open pull request found. Exiting."
-            exit 1
-          fi
-
-          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-
+          PR_NUMBER=${{ github.event.issue.number }}
           PR_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
-          echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV
-
-      - name: Check if 'ci-passed' Label Already Exists
-        id: check-label
-        run: |
-          label_exists=$(gh pr view ${{ env.PR_NUMBER }} --json labels --jq '.labels[].name' | grep 'ci-passed' || true)          
-
-          if [ -n "$label_exists" ]; then
-            echo "'ci-passed' label already exists. Exiting."
-            exit 0
-          fi
-
-      - name: Block Execution of Subsequent Steps if 'ci-passed' Label Exists
-        if: steps.check-label.outputs.exit-code == 0
-        run: |
-          echo "'ci-passed' label exists. Blocking further steps."
-          exit 0 
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV      
 
       - name: Identify Triggered Workflows
         id: identify-triggered
@@ -140,4 +111,4 @@ jobs:
       - name: Add 'ci-passed' Label to PR
         if: ${{ env.all_succeeded == 'true' }}
         run: |
-          gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY 
+          gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
