@@ -32,10 +32,21 @@ jobs:
       - name: Set PR_NUMBER and PR_SHA
         id: set-vars
         run: |
-          PR_NUMBER=${{ github.event.issue.number }}
-          PR_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER=${{ github.event.pull_request.number }}
+          elif [ "${{ github.event.issue.pull_request }}" ]; then
+            PR_NUMBER=${{ github.event.issue.number }}
+          fi
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open pull request found. Exiting."
+            exit 1
+          fi
+
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
-          echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV      
+
+          PR_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid --repo $GITHUB_REPOSITORY)
+          echo "PR_SHA=$PR_SHA" >> $GITHUB_ENV    
 
       - name: Identify Triggered Workflows
         id: identify-triggered
