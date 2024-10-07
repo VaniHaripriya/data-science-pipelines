@@ -1,0 +1,32 @@
+# This workflow runs on pull requests when they are opened, synchronized, or reopened.
+# It performs the following actions:
+# 1. Resets the 'ci-passed' label status when a pull request is synchronized or reopened, 
+#    indicating that changes have been pushed and CI needs to rerun.
+# 2. Polls every 5 minutes to check if all CI checks have passed.
+
+name: CI Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check_ci_status:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read  
+      pull-requests: write        
+    steps:
+      - name: Store PR Info
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "PR_ACTION=${{ github.event.action }}" >> $GITHUB_ENV
+
+      - name: Check if all CI checks passed
+        uses: wechuli/allcheckspassed@0b68b3b7d92e595bcbdea0c860d05605720cf479
+        with:                                 
+          delay: '5'
+          retries: '7'
+          polling_interval: '5'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

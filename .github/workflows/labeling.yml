@@ -1,0 +1,24 @@
+# This workflow adds the 'ci-passed' label to a pull request once the 'CI Check' workflow completes successfully.
+
+name: Labeling Workflow
+
+on:
+  workflow_run:
+    workflows: ["CI Check"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  checks: read
+
+jobs:
+  add_ci_passed_label:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest    
+    steps:
+      - name: Add 'ci-passed' label
+        run: |
+          gh pr edit ${{ env.pr_number }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
