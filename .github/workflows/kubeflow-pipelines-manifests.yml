@@ -1,3 +1,4 @@
+#test
 name: KFP Manifests
 
 on:
@@ -16,5 +17,4 @@ jobs:
         uses: actions/checkout@v4    
 
       - name: Run tests
-        run: ./manifests/kustomize/hack/presubmit.sh 
-# FORCE RUN
+        run: ./manifests/kustomize/hack/presubmit.sh

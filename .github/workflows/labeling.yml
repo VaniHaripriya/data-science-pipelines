@@ -19,6 +19,6 @@ jobs:
     steps:
       - name: Add 'ci-passed' label
         run: |
-          gh pr edit ${{ github.event.workflow_run.pull_requests[0].number }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+          gh pr edit ${{ env.pr_number }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

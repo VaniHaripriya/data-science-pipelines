@@ -11,25 +11,17 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  reset_ci_passed_label:
-    if: github.event_name == 'pull_request' && (github.event.action == 'synchronize' || github.event.action == 'reopened')
-    runs-on: ubuntu-latest
-    permissions:
-      checks: read  
-      pull-requests: write 
-    steps:
-      - name: Reset ci-passed label status on PR Syncronization
-        run: |
-          echo "Resetting 'ci-passed' label as new changes have been pushed."
-          gh pr edit ${{ github.event.pull_request.number }} --remove-label "ci-passed" --repo $GITHUB_REPOSITORY || echo "Label not present"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   check_ci_status:
     runs-on: ubuntu-latest
     permissions:
       checks: read  
       pull-requests: write        
-    steps:      
+    steps:
+      - name: Store PR Info
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "PR_ACTION=${{ github.event.action }}" >> $GITHUB_ENV
+
       - name: Check if all CI checks passed
         uses: wechuli/allcheckspassed@0b68b3b7d92e595bcbdea0c860d05605720cf479
         with:                                 
