@@ -19,6 +19,17 @@ jobs:
     steps:
       - name: Add 'ci-passed' label
         run: |
-          gh pr edit ${{ env.pr_number }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+          gh pr edit ${{ env.PR_NUMBER }} --add-label "ci-passed" --repo $GITHUB_REPOSITORY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  reset_ci_passed_label:
+    if: github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.pull_requests[0].action == 'synchronize' || github.event.workflow_run.pull_requests[0].action == 'reopened')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reset ci-passed label status on PR Synchronization
+        run: |
+          echo "Resetting 'ci-passed' label as new changes have been pushed."
+          gh pr edit ${{ env.PR_NUMBER }} --remove-label "ci-passed" --repo $GITHUB_REPOSITORY || echo "Label not present"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
