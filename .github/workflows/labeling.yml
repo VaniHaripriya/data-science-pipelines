@@ -5,13 +5,14 @@ name: Labeling Workflow
 
 on:
   workflow_run:
-    workflows: ["CI Check"]  # The workflow name to trigger after completion
+    workflows: ["CI Check"]
     types:
       - completed
 
 permissions:
   pull-requests: write
   checks: read
+  actions: read
 
 jobs:
   fetch_data:
