@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: 'Download artifact'
         uses: actions/github-script@v3.1.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             var artifacts = await github.actions.listWorkflowRunArtifacts({
