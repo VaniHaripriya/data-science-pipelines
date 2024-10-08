@@ -1,4 +1,4 @@
-# This workflow polls every 5 minutes for 7 intervals to check if all CI checks have passed.
+# This workflow polls every 5 minutes for 7 times to check if all CI checks have passed.
 
 name: CI Check
 
@@ -12,12 +12,7 @@ jobs:
     permissions:
       checks: read  
       pull-requests: write        
-    steps:
-      - name: Store PR Info
-        run: |
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "PR_ACTION=${{ github.event.action }}" >> $GITHUB_ENV
-
+    steps:    
       - name: Check if all CI checks passed
         uses: wechuli/allcheckspassed@0b68b3b7d92e595bcbdea0c860d05605720cf479
         with:                                 
