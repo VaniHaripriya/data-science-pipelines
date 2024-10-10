@@ -10,7 +10,7 @@ attrs==21.4.0
     # via ml-metadata
 cachetools==5.3.1
     # via google-auth
-certifi==2023.7.22
+certifi==2024.7.4
     # via
     #   kubernetes
     #   requests
@@ -20,7 +20,7 @@ google-auth==2.23.0
     # via kubernetes
 grpcio==1.58.0
     # via ml-metadata
-idna==3.4
+idna==3.7
     # via requests
 kubernetes==10.1.0
     # via -r -
@@ -40,7 +40,7 @@ pyasn1-modules==0.3.0
     # via google-auth
 python-dateutil==2.8.2
     # via kubernetes
-pyyaml==3.13
+pyyaml==4.2b1
     # via kubernetes
 requests==2.31.0
     # via
@@ -55,7 +55,7 @@ six==1.16.0
     #   kubernetes
     #   ml-metadata
     #   python-dateutil
-urllib3==1.26.16
+urllib3==1.26.19
     # via
     #   google-auth
     #   kubernetes
