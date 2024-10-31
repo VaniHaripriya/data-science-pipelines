@@ -177,7 +177,7 @@ urllib3==1.26.6           # via -r -, kfp-server-api, kubernetes, minio, request
 wcwidth==0.2.5            # via prompt-toolkit
 webencodings==0.5.1       # via bleach
 websocket-client==1.2.1   # via docker, kubernetes
-werkzeug==2.0.1           # via tensorboard
+werkzeug==3.0.6           # via tensorboard
 wheel==0.37.0             # via astunparse, strip-hints, tensorboard, tensorflow
 widgetsnbextension==3.5.1  # via ipywidgets
 wrapt==1.12.1             # via deprecated, tensorflow
