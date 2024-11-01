@@ -23,7 +23,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/golang/glog"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/kubeflow/pipelines/api/v2alpha1/go/pipelinespec"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
@@ -79,10 +78,12 @@ func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.Sche
 	}
 
 	var pipeline_options argocompiler.Options
-	if t.platformSpec.PipelineConfig.Ttl != nil {
-		glog.Info("Found pipeline config")
-		pipeline_options = argocompiler.Options{
-			TtlSeconds: *t.platformSpec.PipelineConfig.Ttl,
+	for _, platform := range t.platformSpec.Platforms {
+		if platform.PipelineConfig.PipelineTtl != nil {
+			pipeline_options = argocompiler.Options{
+				TtlSeconds: *platform.PipelineConfig.PipelineTtl,
+			}
+			break
 		}
 	}
 
@@ -310,10 +311,12 @@ func (t *V2Spec) RunWorkflow(modelRun *model.Run, options RunWorkflowOptions) (u
 	}
 
 	var pipeline_options *argocompiler.Options
-	if t.platformSpec.PipelineConfig.Ttl != nil {
-		glog.Info("Found pipeline config")
-		pipeline_options = &argocompiler.Options{
-			TtlSeconds: *t.platformSpec.PipelineConfig.Ttl,
+	for _, platform := range t.platformSpec.Platforms {
+		if platform.PipelineConfig.PipelineTtl != nil {
+			pipeline_options = &argocompiler.Options{
+				TtlSeconds: *platform.PipelineConfig.PipelineTtl,
+			}
+			break
 		}
 	}
 
@@ -361,7 +364,7 @@ func IsPlatformSpecWithKubernetesConfig(template []byte) bool {
 		return false
 	}
 	_, ok := platformSpec.Platforms["kubernetes"]
-	return ok || platformSpec.PipelineConfig != nil
+	return ok
 }
 
 func (t *V2Spec) validatePipelineJobInputs(job *pipelinespec.PipelineJob) error {

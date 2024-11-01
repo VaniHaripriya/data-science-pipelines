@@ -81,6 +81,13 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 		}
 	}
 
+	var pipeline_ttlseconds int32
+	if opts != nil && opts.TtlSeconds != 0 {
+		pipeline_ttlseconds = opts.TtlSeconds
+	} else {
+		pipeline_ttlseconds = pipeline_default_ttlSeconds
+	}
+
 	var kubernetesSpec *pipelinespec.SinglePlatformSpec
 	if kubernetesSpecArg != nil {
 		// clone kubernetesSpecArg, because we don't want to change it
@@ -89,11 +96,6 @@ func Compile(jobArg *pipelinespec.PipelineJob, kubernetesSpecArg *pipelinespec.S
 		if !ok {
 			return nil, fmt.Errorf("bug: cloned Kubernetes spec message does not have expected type")
 		}
-	}
-
-	pipeline_ttlseconds := pipeline_default_ttlSeconds
-	if &opts.TtlSeconds != nil {
-		pipeline_ttlseconds = opts.TtlSeconds
 	}
 
 	// initialization
