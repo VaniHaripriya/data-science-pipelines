@@ -77,9 +77,19 @@ func (t *V2Spec) ScheduledWorkflow(modelJob *model.Job) (*scheduledworkflow.Sche
 		}
 	}
 
+	var pipeline_options argocompiler.Options
+	for _, platform := range t.platformSpec.Platforms {
+		if platform.PipelineConfig.PipelineTtl != 0 {
+			pipeline_options = argocompiler.Options{
+				TtlSeconds: platform.PipelineConfig.PipelineTtl,
+			}
+			break
+		}
+	}
+
 	var obj interface{}
 	if util.CurrentExecutionType() == util.ArgoWorkflow {
-		obj, err = argocompiler.Compile(job, kubernetesSpec, nil)
+		obj, err = argocompiler.Compile(job, kubernetesSpec, &pipeline_options)
 	} else if util.CurrentExecutionType() == util.TektonPipelineRun {
 		obj, err = tektoncompiler.Compile(job, kubernetesSpec, &tektoncompiler.Options{LauncherImage: Launcher})
 	}
@@ -300,9 +310,19 @@ func (t *V2Spec) RunWorkflow(modelRun *model.Run, options RunWorkflowOptions) (u
 		}
 	}
 
+	var pipeline_options *argocompiler.Options
+	for _, platform := range t.platformSpec.Platforms {
+		if platform.PipelineConfig.PipelineTtl != 0 {
+			pipeline_options = &argocompiler.Options{
+				TtlSeconds: platform.PipelineConfig.PipelineTtl,
+			}
+			break
+		}
+	}
+
 	var obj interface{}
 	if util.CurrentExecutionType() == util.ArgoWorkflow {
-		obj, err = argocompiler.Compile(job, kubernetesSpec, nil)
+		obj, err = argocompiler.Compile(job, kubernetesSpec, pipeline_options)
 	} else if util.CurrentExecutionType() == util.TektonPipelineRun {
 		obj, err = tektoncompiler.Compile(job, kubernetesSpec, nil)
 	}
