@@ -60,7 +60,7 @@ jobs:
   reset_ci_passed_label:
     name: Reset 'ci-passed' label on PR Synchronization
     runs-on: ubuntu-latest
-    needs: fetch_data
+    needs: [fetch_data, reset_ci_passed_label]
     steps:
       - name: Check and reset label
         run: |
