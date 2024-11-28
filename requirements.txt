@@ -167,7 +167,7 @@ tfx-bsl==1.2.0            # via tensorflow-data-validation, tensorflow-model-ana
 tfx==1.2.0                # via -r -
 threadpoolctl==2.2.0      # via scikit-learn
 tomli==1.2.1              # via black
-tornado==6.1              # via ipykernel, jupyter-client, notebook, terminado
+tornado==6.4.2              # via ipykernel, jupyter-client, notebook, terminado
 tqdm==4.62.1              # via keras-tuner, papermill
 traitlets==5.0.5          # via ipykernel, ipython, ipywidgets, jupyter-client, jupyter-core, matplotlib-inline, nbclient, nbconvert, nbformat, notebook
 typed-ast==1.4.3          # via black
