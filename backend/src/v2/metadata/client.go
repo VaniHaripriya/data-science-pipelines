@@ -715,7 +715,7 @@ func (c *Client) UpdateDAGExecutionsState(ctx context.Context, dag *DAG, pipelin
 	glog.V(4).Infof("totalTasks: %d", totalTasks)
 
 	glog.Infof("Attempting to update DAG state")
-	if completedTasks == totalTasks {
+	if completedTasks == totalTasks-1 {
 		c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_COMPLETE)
 	} else if failedTasks > 0 {
 		c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_FAILED)
