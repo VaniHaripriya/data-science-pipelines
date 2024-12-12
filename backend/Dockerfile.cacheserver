@@ -38,7 +38,7 @@ RUN go-licenses csv ./backend/src/cache > /tmp/licenses.csv && \
     diff /tmp/licenses.csv backend/third_party_licenses/cache_server.csv && \
     go-licenses save ./backend/src/cache --save_path /tmp/NOTICES
 
-FROM alpine:3.19
+FROM alpine:3.21.0
 
 RUN adduser -S appuser
 USER appuser
