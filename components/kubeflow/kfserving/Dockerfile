@@ -1,4 +1,4 @@
-FROM python:3.6-slim
+FROM python:3.14.0a1-slim
 
 COPY requirements.txt .
 RUN python3 -m pip install -r \
