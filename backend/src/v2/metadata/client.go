@@ -694,8 +694,10 @@ func (c *Client) UpdateDAGExecutionsState(ctx context.Context, dag *DAG, pipelin
 	if err != nil {
 		return err
 	}
-	glog.V(4).Infof("tasks: %v", executedTasks)
+
+	glog.V(4).Infof("Executed tasks: %v", executedTasks)
 	glog.V(4).Infof("Checking Tasks' State")
+
 	completedTasks := 0
 	failedTasks := 0
 	totalExecutedTasks := len(executedTasks)
@@ -703,31 +705,28 @@ func (c *Client) UpdateDAGExecutionsState(ctx context.Context, dag *DAG, pipelin
 
 	for _, task := range executedTasks {
 		taskState := task.GetExecution().LastKnownState.String()
-		glog.V(4).Infof("task: %s", task.TaskName())
-		glog.V(4).Infof("task state: %s", taskState)
+		glog.V(4).Infof("Task: %s, State: %s", task.TaskName(), taskState)
+
 		switch taskState {
 		case "FAILED":
 			failedTasks++
-		case "COMPLETE":
-			completedTasks++
-		case "CACHED":
-			completedTasks++
-		case "CANCELED":
+		case "COMPLETE", "CACHED", "CANCELED":
 			completedTasks++
 		}
 	}
-	glog.V(4).Infof("completedTasks: %d", completedTasks)
-	glog.V(4).Infof("failedTasks: %d", failedTasks)
-	glog.V(4).Infof("totalExecutedTasks: %d", totalExecutedTasks)
+
+	glog.V(4).Infof("Completed: %d, Failed: %d, Total Executed: %d, Total: %d", completedTasks, failedTasks, totalExecutedTasks, totalTasks)
 
 	glog.Infof("Attempting to update DAG state")
-	if completedTasks == totalTasks {
-		c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_COMPLETE)
+
+	// Ensure DAG is only marked as COMPLETE when all tasks have executed and are completed
+	if completedTasks == totalExecutedTasks {
+		return c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_COMPLETE)
 	} else if failedTasks > 0 {
-		c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_FAILED)
-	} else {
-		glog.V(4).Infof("DAG is still running")
+		return c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_FAILED)
 	}
+
+	glog.V(4).Infof("DAG is still running")
 	return nil
 }
 
