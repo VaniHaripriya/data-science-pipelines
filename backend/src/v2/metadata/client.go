@@ -686,42 +686,47 @@ func (c *Client) PrePublishExecution(ctx context.Context, execution *Execution, 
 
 // UpdateDAGExecutionState checks all the statuses of the tasks in the given DAG, based on that it will update the DAG to the corresponding status if necessary.
 func (c *Client) UpdateDAGExecutionsState(ctx context.Context, dag *DAG, pipeline *Pipeline) error {
-	tasks, err := c.GetExecutionsInDAG(ctx, dag, pipeline, true)
+	executedTasks, err := c.GetExecutionsInDAG(ctx, dag, pipeline, true)
 	if err != nil {
 		return err
 	}
-	glog.V(4).Infof("tasks: %v", tasks)
+	allTasks, err := c.GetExecutionsInDAG(ctx, dag, pipeline, false)
+	if err != nil {
+		return err
+	}
+
+	glog.V(4).Infof("Executed tasks: %v", executedTasks)
 	glog.V(4).Infof("Checking Tasks' State")
+
 	completedTasks := 0
 	failedTasks := 0
-	totalTasks := len(tasks)
-	for _, task := range tasks {
+	totalExecutedTasks := len(executedTasks)
+	totalTasks := len(allTasks)
+
+	for _, task := range executedTasks {
 		taskState := task.GetExecution().LastKnownState.String()
-		glog.V(4).Infof("task: %s", task.TaskName())
-		glog.V(4).Infof("task state: %s", taskState)
+		glog.V(4).Infof("Task: %s, State: %s", task.TaskName(), taskState)
+
 		switch taskState {
 		case "FAILED":
 			failedTasks++
-		case "COMPLETE":
-			completedTasks++
-		case "CACHED":
-			completedTasks++
-		case "CANCELED":
+		case "COMPLETE", "CACHED", "CANCELED":
 			completedTasks++
 		}
 	}
-	glog.V(4).Infof("completedTasks: %d", completedTasks)
-	glog.V(4).Infof("failedTasks: %d", failedTasks)
-	glog.V(4).Infof("totalTasks: %d", totalTasks)
+
+	glog.V(4).Infof("Completed: %d, Failed: %d, Total Executed: %d, Total: %d", completedTasks, failedTasks, totalExecutedTasks, totalTasks)
 
 	glog.Infof("Attempting to update DAG state")
-	if completedTasks == totalTasks {
-		c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_COMPLETE)
+
+	// Ensure DAG is only marked as COMPLETE when all tasks have executed and are completed
+	if completedTasks == totalExecutedTasks {
+		return c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_COMPLETE)
 	} else if failedTasks > 0 {
-		c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_FAILED)
-	} else {
-		glog.V(4).Infof("DAG is still running")
+		return c.PutDAGExecutionState(ctx, dag.Execution.GetID(), pb.Execution_FAILED)
 	}
+
+	glog.V(4).Infof("DAG is still running")
 	return nil
 }
 
