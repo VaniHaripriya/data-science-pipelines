@@ -33,7 +33,10 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
+	k8sapi "github.com/kubeflow/pipelines/backend/src/crd/kubernetes/v2beta1"
 	"github.com/minio/minio-go/v6"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -71,6 +74,18 @@ const (
 	clientBurst = "ClientBurst"
 )
 
+var scheme *runtime.Scheme
+
+func init() {
+	scheme = runtime.NewScheme()
+
+	err := k8sapi.AddToScheme(scheme)
+	if err != nil {
+		// Panic is okay here because it means there's a code issue and so the package shouldn't initialize.
+		panic(fmt.Sprintf("Failed to initialize the Kubernetes API scheme: %v", err))
+	}
+}
+
 // Container for all service clients.
 type ClientManager struct {
 	db                        *storage.DB
@@ -92,6 +107,7 @@ type ClientManager struct {
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
 	authenticators            []auth.Authenticator
+	controllerClient          ctrlclient.Client
 }
 
 func (c *ClientManager) TaskStore() storage.TaskStoreInterface {
@@ -166,7 +182,28 @@ func (c *ClientManager) Authenticators() []auth.Authenticator {
 	return c.authenticators
 }
 
+func (c *ClientManager) ControllerClient() ctrlclient.Client {
+	return c.controllerClient
+}
+
 func (c *ClientManager) init() {
+	glog.Info("Initializing controller client...")
+	restConfig, err := util.GetKubernetesConfig()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize the RestConfig: %v", err))
+	}
+	controllerClient, err := ctrlclient.New(
+		restConfig, ctrlclient.Options{Scheme: scheme},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize the controller client: %v", err))
+	}
+	c.controllerClient = controllerClient
+	glog.Info("Controller client initialized successfully.")
+
+	if common.IsOnlyKubernetesWebhookMode() {
+		return
+	}
 	glog.Info("Initializing client manager")
 	glog.Info("Initializing DB client...")
 	db := InitDBClient(common.GetDurationConfig(initConnectionTimeout))

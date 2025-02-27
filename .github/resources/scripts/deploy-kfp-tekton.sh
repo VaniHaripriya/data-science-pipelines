@@ -32,6 +32,19 @@ then
   exit $EXIT_CODE
 fi
 
+#Install cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.9.1/cert-manager.yaml
+kubectl wait --for=condition=Available deployment/cert-manager -n cert-manager --timeout=180s
+kubectl wait --for=condition=ready pod -l 'app in (cert-manager,webhook)' -n cert-manager --timeout=180s || EXIT_CODE=$?
+if [[ $EXIT_CODE -ne 0 ]]
+then
+  echo "Failed to deploy cert-manager."
+  exit $EXIT_CODE
+fi
+
+# Apply webhook configurations
+kubectl apply -k "manifests/kustomize/env/cert-manager/base/webhook/"
+
 # Deploy manifest
 TEST_MANIFESTS=".github/resources/manifests/tekton"
 kubectl apply -k "${TEST_MANIFESTS}" || EXIT_CODE=$?
