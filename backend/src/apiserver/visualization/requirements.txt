@@ -220,7 +220,7 @@ itables==0.1.0
     # via -r requirements.in
 jedi==0.19.0
     # via ipython
-jinja2==2.11.3
+jinja2==3.1.6
     # via
     #   -r requirements.in
     #   bokeh
@@ -247,7 +247,7 @@ jupyter-core==5.3.1
     #   notebook
 jupyterlab-widgets==1.1.7
     # via ipywidgets
-keras==2.10.0
+keras==3.9.0
     # via tensorflow
 keras-preprocessing==1.1.2
     # via tensorflow
