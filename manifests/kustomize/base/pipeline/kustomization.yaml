@@ -34,6 +34,9 @@ resources:
   - container-builder-sa.yaml
   - viewer-sa.yaml
   - kfp-launcher-configmap.yaml
+  - pipelineversion-cert-issuer.yaml
+  - pipelineversion-cert.yaml
+  - validating-pipelineversion.yaml
 images:
   - name: ghcr.io/kubeflow/kfp-api-server
     newTag: 2.4.0
