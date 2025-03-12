@@ -6,7 +6,6 @@ namespace: kubeflow
 resources:
 - ../../dev
 - ../base
-- ../base/webhook
 - namespace.yaml
 
 # NOTE: var name must be unique globally to allow composition of multiple kustomize
