@@ -241,13 +241,16 @@ func startHttpProxy(resourceManager *resource.ResourceManager, controllerClient 
 	// Register a handler for Prometheus to poll.
 	topMux.Handle("/metrics", promhttp.Handler())
 
-	pvValidateWebhook, err := webhook.NewPipelineVersionWebhook(controllerClient)
+	pvValidateWebhook, pvMutateWebhook, err := webhook.NewPipelineVersionWebhook(controllerClient)
 	if err != nil {
 		log.Fatalf("Failed to instantiate the Kubernetes webhook: %v", err)
 	}
 
-	// Register the webhook
+	// Register the validating webhook
 	topMux.Handle("/webhooks/validate-pipelineversion", pvValidateWebhook)
+
+	// Register the mutating webhook
+	topMux.Handle("/webhooks/mutate-pipelineversion", pvMutateWebhook)
 
 	http.ListenAndServe(*httpPortFlag, topMux)
 	glog.Info("Http Proxy started")

@@ -123,14 +123,71 @@ func (p *PipelineVersionsWebhook) ValidateDelete(ctx context.Context, obj runtim
 	return nil, nil
 }
 
-func NewPipelineVersionWebhook(client ctrlclient.Client) (http.Handler, error) {
+func (p *PipelineVersionsWebhook) Default(ctx context.Context, obj runtime.Object) error {
+	pipelineVersion, ok := obj.(*k8sapi.PipelineVersion)
+	if !ok {
+		return newBadRequestError(fmt.Sprintf("Expected a PipelineVersion object but got %T", pipelineVersion))
+	}
+
+	pipeline := &k8sapi.Pipeline{}
+
+	err := p.Client.Get(ctx, types.NamespacedName{Namespace: pipelineVersion.Namespace, Name: pipelineVersion.Spec.PipelineName}, pipeline)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return newBadRequestError("The spec.pipelineName doesn't map to an existing Pipeline object")
+		}
+
+		return err
+	}
+
+	if pipelineVersion.Labels == nil {
+		pipelineVersion.Labels = make(map[string]string)
+	}
+	pipelineVersion.Labels["pipelines.kubeflow.org/pipeline-id"] = string(pipeline.UID)
+
+	needsUpdate := false
+
+	for i := range pipelineVersion.OwnerReferences {
+		ownerRef := &pipelineVersion.OwnerReferences[i]
+		if ownerRef.APIVersion != k8sapi.GroupVersion.String() || ownerRef.Kind != "Pipeline" {
+			continue
+		}
+
+		if ownerRef.Name != pipeline.Name || ownerRef.UID != pipeline.UID {
+			ownerRef.Name = pipeline.Name
+			ownerRef.UID = pipeline.UID
+			needsUpdate = true
+		} else {
+			return nil
+		}
+	}
+
+	if !needsUpdate {
+		pipelineVersion.OwnerReferences = append(pipelineVersion.OwnerReferences, metav1.OwnerReference{
+			APIVersion: k8sapi.GroupVersion.String(),
+			Kind:       "Pipeline",
+			Name:       pipeline.Name,
+			UID:        pipeline.UID,
+		})
+	}
+	return nil
+}
+
+func NewPipelineVersionWebhook(client ctrlclient.Client) (http.Handler, http.Handler, error) {
 	validating, err := ctrladmission.StandaloneWebhook(
 		ctrladmission.WithCustomValidator(scheme, &k8sapi.PipelineVersion{}, &PipelineVersionsWebhook{Client: client}),
 		ctrladmission.StandaloneOptions{},
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	mutating, err := ctrladmission.StandaloneWebhook(
+		ctrladmission.WithCustomDefaulter(scheme, &k8sapi.PipelineVersion{}, &PipelineVersionsWebhook{Client: client}),
+		ctrladmission.StandaloneOptions{},
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return validating, nil
+	return validating, mutating, nil
 }

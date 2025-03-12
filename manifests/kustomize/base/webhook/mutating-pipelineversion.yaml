@@ -1,5 +1,5 @@
 apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
+kind: MutatingWebhookConfiguration
 metadata:
   name: pipelineversions.pipelines.kubeflow.org
   annotations:
@@ -23,7 +23,7 @@ webhooks:
     failurePolicy: Fail
     clientConfig:
       service:
-        name: ml-pipeline
+        name: ml-pipeline-reverse-proxy
         namespace: kubeflow
-        path: /webhooks/validate-pipelineversion
+        path: /webhooks/mutate-pipelineversion
         port: 9443

@@ -1,9 +1,9 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: webhook-pipelineversion-cert
+  name: pipelineversion-webhook-cert
 spec:
-  commonName: webhook-pipelineversion-cert
+  commonName: pipelineversion-webhook-cert
   isCA: true
   dnsNames:
   - ml-pipeline
