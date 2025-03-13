@@ -79,7 +79,7 @@ func main() {
 
 	clientManager := cm.NewClientManager()
 	if common.IsOnlyKubernetesWebhookMode() {
-		startWebhookHTTPProxy(clientManager.ControllerClient())
+		startWebhookHTTPSProxy(clientManager.ControllerClient())
 		clientManager.Close()
 		return
 	}
