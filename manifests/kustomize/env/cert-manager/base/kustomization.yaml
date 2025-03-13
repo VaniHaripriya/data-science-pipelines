@@ -5,10 +5,7 @@ namespace: kubeflow
 resources:
   - cache-cert-issuer.yaml
   - cache-cert.yaml
-  - cache-webhook-config.yaml
-  - webhook/pipelineversion-cert-issuer.yaml
-  - webhook/pipelineversion-cert.yaml
-  - webhook/validating-pipelineversion.yaml
+  - cache-webhook-config.yaml  
 commonLabels:
   app: cache-server-cert-manager
 

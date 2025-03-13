@@ -28,7 +28,7 @@ kubectl apply -k "manifests/kustomize/cluster-scoped-resources/"
 #Install cert-manager
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.9.1/cert-manager.yaml
 kubectl wait --for=condition=ready pod -l 'app in (cert-manager,webhook)' --timeout=180s -n cert-manager
-kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/cert-manager/base/webhook/" 
+kubectl apply -k "manifests/kustomize/env/cert-manager/base/webhook/" 
 kubectl wait crd/applications.app.k8s.io --for condition=established --timeout=180s || EXIT_CODE=$?
 if [[ $EXIT_CODE -ne 0 ]]
 then
