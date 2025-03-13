@@ -33,7 +33,10 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
+	k8sapi "github.com/kubeflow/pipelines/backend/src/crd/kubernetes/v2beta1"
 	"github.com/minio/minio-go/v6"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -71,6 +74,18 @@ const (
 	clientBurst = "ClientBurst"
 )
 
+var scheme *runtime.Scheme
+
+func init() {
+	scheme = runtime.NewScheme()
+
+	err := k8sapi.AddToScheme(scheme)
+	if err != nil {
+		// Panic is okay here because it means there's a code issue and so the package shouldn't initialize.
+		panic(fmt.Sprintf("Failed to initialize the Kubernetes API scheme: %v", err))
+	}
+}
+
 // Container for all service clients.
 type ClientManager struct {
 	db                        *storage.DB
@@ -92,6 +107,7 @@ type ClientManager struct {
 	time                      util.TimeInterface
 	uuid                      util.UUIDGeneratorInterface
 	authenticators            []auth.Authenticator
+	controllerClient          ctrlclient.Client
 }
 
 func (c *ClientManager) TaskStore() storage.TaskStoreInterface {
@@ -166,54 +182,76 @@ func (c *ClientManager) Authenticators() []auth.Authenticator {
 	return c.authenticators
 }
 
-func (c *ClientManager) init() {
-	glog.Info("Initializing client manager")
-	glog.Info("Initializing DB client...")
-	db := InitDBClient(common.GetDurationConfig(initConnectionTimeout))
-	db.SetConnMaxLifetime(common.GetDurationConfig(dbConMaxLifeTime))
-	glog.Info("DB client initialized successfully")
-	// time
-	c.time = util.NewRealTime()
+func (c *ClientManager) ControllerClient() ctrlclient.Client {
+	return c.controllerClient
+}
 
-	// UUID generator
-	c.uuid = util.NewUUIDGenerator()
-
-	c.db = db
-	c.experimentStore = storage.NewExperimentStore(db, c.time, c.uuid)
-	c.pipelineStore = storage.NewPipelineStore(db, c.time, c.uuid)
-	c.jobStore = storage.NewJobStore(db, c.time)
-	c.taskStore = storage.NewTaskStore(db, c.time, c.uuid)
-	c.resourceReferenceStore = storage.NewResourceReferenceStore(db)
-	c.dBStatusStore = storage.NewDBStatusStore(db)
-	c.defaultExperimentStore = storage.NewDefaultExperimentStore(db)
-	glog.Info("Initializing Object store client...")
-	c.objectStore = initMinioClient(common.GetDurationConfig(initConnectionTimeout))
-	glog.Info("Object store client initialized successfully")
-	// Use default value of client QPS (5) & burst (10) defined in
-	// k8s.io/client-go/rest/config.go#RESTClientFor
-	clientParams := util.ClientParameters{
-		QPS:   common.GetFloat64ConfigWithDefault(clientQPS, 5),
-		Burst: common.GetIntConfigWithDefault(clientBurst, 10),
+func (c *ClientManager) init(onlyKubernetesWebhookMode bool) {
+	glog.Info("Initializing controller client...")
+	restConfig, err := util.GetKubernetesConfig()
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize the RestConfig: %v", err))
 	}
-
-	c.execClient = util.NewExecutionClientOrFatal(util.CurrentExecutionType(), common.GetDurationConfig(initConnectionTimeout), clientParams)
-
-	c.swfClient = client.NewScheduledWorkflowClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
-
-	c.k8sCoreClient = client.CreateKubernetesCoreOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
-
-	runStore := storage.NewRunStore(db, c.time)
-	c.runStore = runStore
-
-	// Log archive
-	c.logArchive = initLogArchive()
-
-	if common.IsMultiUserMode() {
-		c.subjectAccessReviewClient = client.CreateSubjectAccessReviewClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
-		c.tokenReviewClient = client.CreateTokenReviewClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
-		c.authenticators = auth.GetAuthenticators(c.tokenReviewClient)
+	controllerClient, err := ctrlclient.New(
+		restConfig, ctrlclient.Options{Scheme: scheme},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize the controller client: %v", err))
 	}
-	glog.Infof("Client manager initialized successfully")
+	c.controllerClient = controllerClient
+	glog.Info("Controller client initialized successfully.")
+
+	if !onlyKubernetesWebhookMode {
+		glog.Info("Initializing client manager")
+		glog.Info("Initializing DB client...")
+		db := InitDBClient(common.GetDurationConfig(initConnectionTimeout))
+		db.SetConnMaxLifetime(common.GetDurationConfig(dbConMaxLifeTime))
+		glog.Info("DB client initialized successfully")
+		// time
+		c.time = util.NewRealTime()
+
+		// UUID generator
+		c.uuid = util.NewUUIDGenerator()
+
+		c.db = db
+		c.experimentStore = storage.NewExperimentStore(db, c.time, c.uuid)
+		c.pipelineStore = storage.NewPipelineStore(db, c.time, c.uuid)
+		c.jobStore = storage.NewJobStore(db, c.time)
+		c.taskStore = storage.NewTaskStore(db, c.time, c.uuid)
+		c.resourceReferenceStore = storage.NewResourceReferenceStore(db)
+		c.dBStatusStore = storage.NewDBStatusStore(db)
+		c.defaultExperimentStore = storage.NewDefaultExperimentStore(db)
+		glog.Info("Initializing Object store client...")
+		c.objectStore = initMinioClient(common.GetDurationConfig(initConnectionTimeout))
+		glog.Info("Object store client initialized successfully")
+		// Use default value of client QPS (5) & burst (10) defined in
+		// k8s.io/client-go/rest/config.go#RESTClientFor
+		clientParams := util.ClientParameters{
+			QPS:   common.GetFloat64ConfigWithDefault(clientQPS, 5),
+			Burst: common.GetIntConfigWithDefault(clientBurst, 10),
+		}
+
+		c.execClient = util.NewExecutionClientOrFatal(util.CurrentExecutionType(), common.GetDurationConfig(initConnectionTimeout), clientParams)
+
+		c.swfClient = client.NewScheduledWorkflowClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
+
+		c.k8sCoreClient = client.CreateKubernetesCoreOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
+
+		runStore := storage.NewRunStore(db, c.time)
+		c.runStore = runStore
+
+		// Log archive
+		c.logArchive = initLogArchive()
+
+		if common.IsMultiUserMode() {
+			c.subjectAccessReviewClient = client.CreateSubjectAccessReviewClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
+			c.tokenReviewClient = client.CreateTokenReviewClientOrFatal(common.GetDurationConfig(initConnectionTimeout), clientParams)
+			c.authenticators = auth.GetAuthenticators(c.tokenReviewClient)
+		}
+		glog.Infof("Client manager initialized successfully")
+	} else {
+		glog.Info("Only Kubernetes webhook mode enabled. Skipping DB and Object Store initialization.")
+	}
 }
 
 func (c *ClientManager) Close() {
@@ -531,9 +569,9 @@ func initLogArchive() (logArchive archive.LogArchiveInterface) {
 }
 
 // NewClientManager creates and Init a new instance of ClientManager.
-func NewClientManager() ClientManager {
+func NewClientManager(onlyKubernetesWebhookMode bool) ClientManager {
 	clientManager := ClientManager{}
-	clientManager.init()
+	clientManager.init(onlyKubernetesWebhookMode)
 
 	return clientManager
 }

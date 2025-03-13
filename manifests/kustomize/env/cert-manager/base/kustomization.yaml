@@ -5,7 +5,7 @@ namespace: kubeflow
 resources:
   - cache-cert-issuer.yaml
   - cache-cert.yaml
-  - cache-webhook-config.yaml
+  - cache-webhook-config.yaml  
 commonLabels:
   app: cache-server-cert-manager
 
