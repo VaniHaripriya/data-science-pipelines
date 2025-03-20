@@ -36,7 +36,7 @@ spec:
       - --run_name
       - '{{workflow.name}}'
       - --run_display_name
-      - ''
+      - ""
       - --dag_execution_id
       - '{{inputs.parameters.parent-dag-id}}'
       - --component
@@ -224,7 +224,7 @@ spec:
       - --run_name
       - '{{workflow.name}}'
       - --run_display_name
-      - ''
+      - ""
       - --dag_execution_id
       - '{{inputs.parameters.parent-dag-id}}'
       - --component
@@ -233,8 +233,6 @@ spec:
       - '{{inputs.parameters.task}}'
       - --runtime_config
       - '{{inputs.parameters.runtime-config}}'
-      - --platform_spec
-      - '{{inputs.parameters.platform-spec}}'
       - --iteration_index
       - '{{inputs.parameters.iteration-index}}'
       - --execution_id_path
@@ -259,8 +257,6 @@ spec:
       - name: component
       - default: ""
         name: runtime-config
-      - default: ""
-        name: platform-spec
       - default: ""
         name: task
       - default: "0"
@@ -292,8 +288,6 @@ spec:
             value: '{{workflow.parameters.components-root}}'
           - name: runtime-config
             value: '{"parameters":{"text":{"stringValue":"hi there"}}}'
-          - name: platform-spec
-            value: '{"platforms":{"kubernetes":{"pipelineConfig":{"pipelineTtl":60}}}}'
           - name: driver-type
             value: ROOT_DAG
         name: root-driver
@@ -311,6 +305,8 @@ spec:
     metadata: {}
     name: entrypoint
     outputs: {}
+  ttlStrategy:
+    secondsAfterCompletion: 60
 status:
   finishedAt: null
   startedAt: null

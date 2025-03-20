@@ -74,14 +74,6 @@
         "stringValue": "hi there"
       }
     }
-  },
-  "platformSpec": {
-    "platforms": {
-      "kubernetes": {
-        "pipelineConfig": {
-          "pipelineTtl": 60
-        }
-      }
-    }
   }
 }
+  

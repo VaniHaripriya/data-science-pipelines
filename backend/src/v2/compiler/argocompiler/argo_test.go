@@ -37,6 +37,7 @@ func Test_argo_compiler(t *testing.T) {
 		platformSpecPath string // path of possible input PlatformSpec to compile
 		argoYAMLPath     string // path of expected output argo workflow YAML
 		envVars          map[string]string
+		opts             *argocompiler.Options
 	}{
 		{
 			jobPath:          "../testdata/hello_world.json",
@@ -82,8 +83,9 @@ func Test_argo_compiler(t *testing.T) {
 		},
 		{
 			jobPath:          "../testdata/hello_world_ttl.json",
-			platformSpecPath: "",
+			platformSpecPath: "../testdata/hello_world_ttl_platform.json",
 			argoYAMLPath:     "testdata/hello_world_ttl.yaml",
+			opts:             &argocompiler.Options{TtlSeconds: 60},
 		},
 	}
 	for _, tt := range tests {
@@ -105,10 +107,10 @@ func Test_argo_compiler(t *testing.T) {
 					}
 				}
 			}()
-
+			var opts *argocompiler.Options = tt.opts
 			job, platformSpec := load(t, tt.jobPath, tt.platformSpecPath)
 			if *update {
-				wf, err := argocompiler.Compile(job, platformSpec, nil)
+				wf, err := argocompiler.Compile(job, platformSpec, opts)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -125,7 +127,7 @@ func Test_argo_compiler(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wf, err := argocompiler.Compile(job, platformSpec, nil)
+			wf, err := argocompiler.Compile(job, platformSpec, opts)
 			if err != nil {
 				t.Error(err)
 			}
