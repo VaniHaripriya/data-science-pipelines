@@ -96,7 +96,7 @@ func main() {
 
 	zapLevel, err := common.ParseLogLevel(logLevel)
 	if err != nil {
-		glog.Infof("%v. Defaulting to info level.", err)
+		glog.Infof("%v. Defaulting to info level", err)
 		zapLevel = zapcore.InfoLevel
 	}
 
