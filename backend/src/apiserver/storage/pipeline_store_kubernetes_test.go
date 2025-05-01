@@ -69,7 +69,7 @@ func TestListK8sPipelines_WithFilter(t *testing.T) {
 			{
 				Key:   "name",
 				Op:    api.Predicate_IS_SUBSTRING,
-				Value: &api.Predicate_StringValue{StringValue: "Test"},
+				Value: &api.Predicate_StringValue{StringValue: "test"},
 			},
 		},
 	}
@@ -117,7 +117,7 @@ func TestListK8sPipelines_Pagination(t *testing.T) {
 	require.Nil(t, err1, "Failed to create list options: %v")
 	pipelines, _, _, err3 := store.ListPipelines(&model.FilterContext{}, options)
 	require.Nil(t, err3, "Failed to list pipelines: %v")
-	require.Equalf(t, pipelines[0].Name, "Test Pipeline 3", "Pagination failed")
+	require.Equalf(t, pipelines[0].Name, "test-pipeline-3", "Pagination failed")
 }
 
 func TestListK8sPipelines_Pagination_Descend(t *testing.T) {
@@ -154,7 +154,7 @@ func TestListK8sPipelines_Pagination_Descend(t *testing.T) {
 	options, err1 = list.NewOptionsFromToken(npt, 1)
 	pipelines, _, _, err3 := store.ListPipelines(&model.FilterContext{}, options)
 	require.Nil(t, err3, "Failed to list pipelines: %v")
-	require.Equalf(t, pipelines[0].Name, "Test Pipeline 3", "Pagination failed")
+	require.Equalf(t, pipelines[0].Name, "test-pipeline-3", "Pagination failed")
 }
 
 func TestListK8sPipelinesV1_Pagination_NameAsc(t *testing.T) {
@@ -191,7 +191,7 @@ func TestListK8sPipelinesV1_Pagination_NameAsc(t *testing.T) {
 	options, err1 = list.NewOptionsFromToken(npt, 1)
 	pipelines, _, _, err3 := store.ListPipelines(&model.FilterContext{}, options)
 	require.Nil(t, err3, "Failed to list pipelines: %v")
-	require.Equalf(t, pipelines[0].Name, "Test Pipeline 1", "Pagination failed")
+	require.Equalf(t, pipelines[0].Name, "test-pipeline-1", "Pagination failed")
 }
 
 func TestListK8sPipelines_Pagination_LessThanPageSize(t *testing.T) {
@@ -253,7 +253,7 @@ func TestCreateK8sPipeline(t *testing.T) {
 		t.Fatalf("Failed to create Pipeline: %v", err)
 	}
 
-	require.Equalf(t, pipeline.Name, "Test Pipeline", "Pipeline name is not the same")
+	require.Equalf(t, pipeline.Name, "test-pipeline", "Pipeline name is not the same")
 }
 
 func TestDeleteK8sPipeline(t *testing.T) {
@@ -332,7 +332,7 @@ func TestGetLatestK8sPipelineVersion(t *testing.T) {
 
 	pipelineVersion, err := store.GetLatestPipelineVersion(DefaultFakePipelineIdTwo)
 	require.Nil(t, err, "Failed to get latest pipeline version: %v", err)
-	require.Equal(t, "Test Pipeline Version 3", pipelineVersion.Name)
+	require.Equal(t, "test-pipeline-version-3", pipelineVersion.Name)
 }
 
 func TestGetK8sPipelineVersion_NotFoundError(t *testing.T) {
@@ -382,7 +382,7 @@ func TestListK8sPipelineVersions_Pagination(t *testing.T) {
 	pipelineVersions, _, _, err = store.ListPipelineVersions(DefaultFakePipelineIdTwo, options)
 	require.Nil(t, err, "Failed to list pipeline versions: %v", err)
 	require.Equalf(t, len(pipelineVersions), 1, "List size should not be zero")
-	require.Equalf(t, pipelineVersions[0].Name, "Test Pipeline Version 3", "Pagination did not work as expected")
+	require.Equalf(t, pipelineVersions[0].Name, "test-pipeline-version-3", "Pagination did not work as expected")
 }
 
 func TestListK8sPipelineVersions_Pagination_Descend(t *testing.T) {
@@ -412,7 +412,7 @@ func TestListK8sPipelineVersions_Pagination_Descend(t *testing.T) {
 	pipelineVersions, _, _, err1 := store.ListPipelineVersions(DefaultFakePipelineIdTwo, options)
 	require.Nil(t, err1, "Failed to list pipeline versions: %v", err)
 	require.Equalf(t, len(pipelineVersions), 1, "List size should not be zero")
-	require.Equalf(t, pipelineVersions[0].Name, "Test Pipeline Version 3", "Pagination did not work as expected")
+	require.Equalf(t, pipelineVersions[0].Name, "test-pipeline-version-3", "Pagination did not work as expected")
 }
 
 func TestListK8sPipelineVersions_Pagination_LessThanPageSize(t *testing.T) {
@@ -438,9 +438,9 @@ func TestGetK8sPipelineVersionByName(t *testing.T) {
 
 	store := NewPipelineStoreKubernetes(getClient())
 
-	pipelineVersion, err := store.GetPipelineVersionByName("Test Pipeline Version 3")
+	pipelineVersion, err := store.GetPipelineVersionByName("test-pipeline-version-3")
 	require.Nil(t, err, "Failed to get Pipeline: %v", err)
-	require.Equalf(t, pipelineVersion.Name, "Test Pipeline Version 3", pipelineVersion.Name)
+	require.Equalf(t, pipelineVersion.Name, "test-pipeline-version-3", pipelineVersion.Name)
 }
 
 func TestListK8sPipelineVersions_WithFilter(t *testing.T) {
@@ -455,7 +455,7 @@ func TestListK8sPipelineVersions_WithFilter(t *testing.T) {
 			{
 				Key:   "name",
 				Op:    api.Predicate_IS_SUBSTRING,
-				Value: &api.Predicate_StringValue{StringValue: "Test"},
+				Value: &api.Predicate_StringValue{StringValue: "test"},
 			},
 		},
 	}
@@ -497,7 +497,7 @@ func getClient() (client.Client, client.Client) {
 	pipeline3 := &v2beta1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       DefaultFakePipelineIdTwo,
-			Name:      "Test Pipeline 3",
+			Name:      "test-pipeline-3",
 			Namespace: "Test",
 		},
 		Spec: v2beta1.PipelineSpec{
@@ -532,7 +532,7 @@ func getClient() (client.Client, client.Client) {
 	pipelineVersion3 := &v2beta1.PipelineVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       DefaultFakePipelineIdTwo,
-			Name:      "Test Pipeline Version 3",
+			Name:      "test-pipeline-version-3",
 			Namespace: "Test",
 			Labels: map[string]string{
 				"pipelines.kubeflow.org/pipeline-id": DefaultFakePipelineIdTwo,

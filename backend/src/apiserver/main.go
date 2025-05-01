@@ -70,6 +70,8 @@ var (
 	sampleConfigPath              = flag.String("sampleconfig", "", "Path to samples")
 	collectMetricsFlag            = flag.Bool("collectMetricsFlag", true, "Whether to collect Prometheus metrics in API server.")
 	usePipelinesKubernetesStorage = flag.Bool("pipelinesStoreKubernetes", false, "Store and run pipeline versions in Kubernetes")
+	disableWebhook                = flag.Bool("disableWebhook", false, "Set this if pipelinesStoreKubernetes is on but using a global webhook")
+	globalKubernetesWebhookMode   = flag.Bool("globalKubernetesWebhookMode", false, "Set this to run exclusively in Kubernetes Webhook mode")
 )
 
 type RegisterHttpHandlerFromEndpoint func(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) error
@@ -93,6 +95,7 @@ func main() {
 
 	options := &cm.Options{
 		UsePipelineKubernetesStorage: *usePipelinesKubernetesStorage,
+		GlobalKubernetesWebhookMode:  *globalKubernetesWebhookMode,
 		Context:                      backgroundCtx,
 		WaitGroup:                    &wg,
 	}
@@ -122,9 +125,9 @@ func main() {
 	}
 
 	defer clientManager.Close()
-	webhookOnlyMode := common.IsOnlyKubernetesWebhookMode()
+	webhookOnlyMode := *globalKubernetesWebhookMode
 
-	if *usePipelinesKubernetesStorage || webhookOnlyMode {
+	if (*usePipelinesKubernetesStorage || webhookOnlyMode) && !*disableWebhook {
 		wg.Add(1)
 		webhookServer, err := startWebhook(
 			clientManager.ControllerClient(true), clientManager.ControllerClient(false), &wg,

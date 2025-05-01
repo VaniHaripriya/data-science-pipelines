@@ -15,7 +15,9 @@
 package common
 
 import (
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -32,7 +34,6 @@ const (
 	KubeflowUserIDPrefix                    string = "KUBEFLOW_USERID_PREFIX"
 	UpdatePipelineVersionByDefault          string = "AUTO_UPDATE_PIPELINE_DEFAULT_VERSION"
 	TokenReviewAudience                     string = "TOKEN_REVIEW_AUDIENCE"
-	GlobalKubernetesWebhookMode             string = "GLOBAL_KUBERNETES_WEBHOOK_MODE"
 )
 
 func IsPipelineVersionUpdatedByDefault() bool {
@@ -129,6 +130,19 @@ func GetTokenReviewAudience() string {
 	return GetStringConfigWithDefault(TokenReviewAudience, DefaultTokenReviewAudience)
 }
 
-func IsOnlyKubernetesWebhookMode() bool {
-	return GetBoolConfigWithDefault(GlobalKubernetesWebhookMode, false)
+func ConvertToK8sFormat(name string) string {
+	name = strings.ToLower(name)
+	nonAlphanumeric := regexp.MustCompile(`[^-0-9a-z]+`)
+	name = nonAlphanumeric.ReplaceAllString(name, "-")
+	multipleDashes := regexp.MustCompile(`-+`)
+	name = multipleDashes.ReplaceAllString(name, "-")
+	name = strings.Trim(name, "-")
+	if name == "" {
+		name = "pipeline"
+	}
+	if len(name) > 253 {
+		name = name[:253]
+		name = strings.TrimRight(name, "-")
+	}
+	return name
 }
