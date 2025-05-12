@@ -120,7 +120,7 @@ func (s *PipelineVersionApiTest) TestArgoSpec() {
 	pipelineVersionParams.SetPipelineid(&pipelineId)
 	argumentYAMLPipelineVersion, err := s.pipelineUploadClient.UploadPipelineVersion("../resources/arguments-parameters.yaml", pipelineVersionParams)
 	require.Nil(t, err)
-	assert.Equal(t, "arguments-parameters.yaml", argumentYAMLPipelineVersion.Name)
+	assert.Equal(t, "arguments-parameters-yaml", argumentYAMLPipelineVersion.Name)
 
 	/* ---------- Update pipeline default version ---------- */
 	time.Sleep(1 * time.Second)
@@ -221,7 +221,7 @@ func (s *PipelineVersionApiTest) TestArgoSpec() {
 	assert.Equal(t, 3, len(listFirstPagePipelineVersions))
 	assert.Equal(t, 5, totalSize)
 	assert.Equal(t, "arguments", listFirstPagePipelineVersions[0].Name)
-	assert.Equal(t, "arguments-parameters.yaml", listFirstPagePipelineVersions[1].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listFirstPagePipelineVersions[1].Name)
 	assert.Equal(t, "sequential", listFirstPagePipelineVersions[2].Name)
 	assert.NotEmpty(t, nextPageToken)
 
@@ -252,7 +252,7 @@ func (s *PipelineVersionApiTest) TestArgoSpec() {
 	assert.Equal(t, 3, len(listFirstPagePipelineVersions))
 	assert.Equal(t, 5, totalSize)
 	assert.Equal(t, "test_pipeline", listFirstPagePipelineVersions[0].Name)
-	assert.Equal(t, "arguments-parameters.yaml", listFirstPagePipelineVersions[1].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listFirstPagePipelineVersions[1].Name)
 	assert.Equal(t, "sequential", listFirstPagePipelineVersions[2].Name)
 	assert.NotEmpty(t, nextPageToken)
 
@@ -307,7 +307,7 @@ func (s *PipelineVersionApiTest) TestArgoSpec() {
 	require.Nil(t, err)
 	assert.Equal(t, 2, len(listSecondPagePipelineVersions))
 	assert.Equal(t, 5, totalSize)
-	assert.Equal(t, "arguments-parameters.yaml", listSecondPagePipelineVersions[0].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listSecondPagePipelineVersions[0].Name)
 	assert.Equal(t, "arguments", listSecondPagePipelineVersions[1].Name)
 	assert.Empty(t, nextPageToken)
 
