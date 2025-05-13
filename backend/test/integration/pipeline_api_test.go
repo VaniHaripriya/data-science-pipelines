@@ -152,7 +152,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, 5, totalSize)
 	for _, p := range pipelines {
 		// Sampling one of the pipelines and verify the result is expected.
-		if p.Name == "arguments-parameters.yaml" {
+		if p.Name == "arguments-parameters-yaml" {
 			verifyPipeline(t, p)
 		}
 	}
@@ -163,8 +163,8 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	require.Nil(t, err)
 	assert.Equal(t, 2, len(listFirstPagePipelines))
 	assert.Equal(t, 5, totalSize)
-	assert.Equal(t, "arguments-parameters.yaml", listFirstPagePipelines[0].Name)
-	assert.Equal(t, "arguments.pipeline.zip", listFirstPagePipelines[1].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listFirstPagePipelines[0].Name)
+	assert.Equal(t, "arguments.pipeline-zip", listFirstPagePipelines[1].Name)
 	assert.NotEmpty(t, nextPageToken)
 
 	listSecondPagePipelines, totalSize, nextPageToken, err := s.pipelineClient.List(
@@ -194,7 +194,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, 2, len(listSecondPagePipelines))
 	assert.Equal(t, 5, totalSize)
 	assert.Equal(t, "zip-arguments-parameters", listSecondPagePipelines[0].Name)
-	assert.Equal(t, "arguments-pipeline-zip", listSecondPagePipelines[1].Name)
+	assert.Equal(t, "arguments.pipeline-zip", listSecondPagePipelines[1].Name)
 	assert.Empty(t, nextPageToken)
 
 	/* ---------- List pipelines sort by unsupported description field. Should fail. ---------- */
