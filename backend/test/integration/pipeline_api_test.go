@@ -105,13 +105,13 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	/* ------ Upload v2 pipeline spec YAML --------*/
 	v2HelloPipeline, err := s.pipelineUploadClient.UploadFile("../resources/v2-hello-world.yaml", uploadParams.NewUploadPipelineParams())
 	require.Nil(t, err)
-	assert.Equal(t, "v2-hello-world.yaml", v2HelloPipeline.Name)
+	assert.Equal(t, "v2-hello-world-yaml", v2HelloPipeline.Name)
 
 	/* ---------- Upload pipelines YAML ---------- */
 	time.Sleep(1 * time.Second)
 	argumentYAMLPipeline, err := s.pipelineUploadClient.UploadFile("../resources/arguments-parameters.yaml", uploadParams.NewUploadPipelineParams())
 	require.Nil(t, err)
-	assert.Equal(t, "arguments-parameters.yaml", argumentYAMLPipeline.Name)
+	assert.Equal(t, "arguments-parameters-yaml", argumentYAMLPipeline.Name)
 
 	/* ---------- Upload the same pipeline again. Should fail due to name uniqueness ---------- */
 	_, err = s.pipelineUploadClient.UploadFile("../resources/arguments-parameters.yaml", uploadParams.NewUploadPipelineParams())
@@ -152,7 +152,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, 5, totalSize)
 	for _, p := range pipelines {
 		// Sampling one of the pipelines and verify the result is expected.
-		if p.Name == "arguments-parameters.yaml" {
+		if p.Name == "arguments-parameters-yaml" {
 			verifyPipeline(t, p)
 		}
 	}
@@ -163,8 +163,8 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	require.Nil(t, err)
 	assert.Equal(t, 2, len(listFirstPagePipelines))
 	assert.Equal(t, 5, totalSize)
-	assert.Equal(t, "arguments-parameters.yaml", listFirstPagePipelines[0].Name)
-	assert.Equal(t, "arguments.pipeline.zip", listFirstPagePipelines[1].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listFirstPagePipelines[0].Name)
+	assert.Equal(t, "arguments.pipeline-zip", listFirstPagePipelines[1].Name)
 	assert.NotEmpty(t, nextPageToken)
 
 	listSecondPagePipelines, totalSize, nextPageToken, err := s.pipelineClient.List(
@@ -184,7 +184,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, 3, len(listFirstPagePipelines))
 	assert.Equal(t, 5, totalSize)
 	assert.Equal(t, "v2-hello-world.yaml", listFirstPagePipelines[0].Name)
-	assert.Equal(t, "arguments-parameters.yaml", listFirstPagePipelines[1].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listFirstPagePipelines[1].Name)
 	assert.Equal(t, "sequential", listFirstPagePipelines[2].Name)
 	assert.NotEmpty(t, nextPageToken)
 
@@ -194,7 +194,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, 2, len(listSecondPagePipelines))
 	assert.Equal(t, 5, totalSize)
 	assert.Equal(t, "zip-arguments-parameters", listSecondPagePipelines[0].Name)
-	assert.Equal(t, "arguments.pipeline.zip", listSecondPagePipelines[1].Name)
+	assert.Equal(t, "arguments.pipeline-zip", listSecondPagePipelines[1].Name)
 	assert.Empty(t, nextPageToken)
 
 	/* ---------- List pipelines sort by unsupported description field. Should fail. ---------- */
@@ -210,7 +210,7 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	assert.Equal(t, 3, len(listFirstPagePipelines))
 	assert.Equal(t, 5, totalSize)
 	assert.Equal(t, "zip-arguments-parameters", listFirstPagePipelines[0].Name)
-	assert.Equal(t, "v2-hello-world.yaml", listFirstPagePipelines[1].Name)
+	assert.Equal(t, "v2-hello-world-yaml", listFirstPagePipelines[1].Name)
 	assert.Equal(t, "sequential", listFirstPagePipelines[2].Name)
 	assert.NotEmpty(t, nextPageToken)
 
@@ -220,8 +220,8 @@ func (s *PipelineApiTest) TestPipelineAPI() {
 	require.Nil(t, err)
 	assert.Equal(t, 2, len(listSecondPagePipelines))
 	assert.Equal(t, 5, totalSize)
-	assert.Equal(t, "arguments.pipeline.zip", listSecondPagePipelines[0].Name)
-	assert.Equal(t, "arguments-parameters.yaml", listSecondPagePipelines[1].Name)
+	assert.Equal(t, "arguments.pipeline-zip", listSecondPagePipelines[0].Name)
+	assert.Equal(t, "arguments-parameters-yaml", listSecondPagePipelines[1].Name)
 	assert.Empty(t, nextPageToken)
 
 	/* ---------- Verify get pipeline works ---------- */
@@ -251,7 +251,7 @@ func verifyPipeline(t *testing.T, pipeline *model.APIPipeline) {
 	expected := model.APIPipeline{
 		ID:        pipeline.ID,
 		CreatedAt: pipeline.CreatedAt,
-		Name:      "arguments-parameters.yaml",
+		Name:      "arguments-parameters-yaml",
 		Parameters: []*model.APIParameter{
 			{Name: "param1", Value: "hello"}, // Default value in the pipeline template
 			{Name: "param2"},                 // No default value in the pipeline
@@ -259,7 +259,7 @@ func verifyPipeline(t *testing.T, pipeline *model.APIPipeline) {
 		DefaultVersion: &model.APIPipelineVersion{
 			CreatedAt: pipeline.DefaultVersion.CreatedAt,
 			ID:        pipeline.DefaultVersion.ID,
-			Name:      "arguments-parameters.yaml",
+			Name:      "arguments-parameters-yaml",
 			Parameters: []*model.APIParameter{
 				{Name: "param1", Value: "hello"},
 				{Name: "param2"},

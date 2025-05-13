@@ -211,6 +211,7 @@ func (k *PipelineStoreKubernetes) CreatePipeline(pipeline *model.Pipeline) (*mod
 
 		pipeline.Namespace = common.GetPodNamespace()
 	}
+	pipeline.Name = common.ConvertToK8sFormat(pipeline.Name)
 
 	k8sPipeline := v2beta1.FromPipelineModel(*pipeline)
 
@@ -553,7 +554,7 @@ func (k *PipelineStoreKubernetes) createPipelineVersionWithPipeline(ctx context.
 	if err != nil {
 		return nil, util.NewBadRequestError(err, "Invalid pipeline spec")
 	}
-
+	k8sPipelineVersion.Name = common.ConvertToK8sFormat(k8sPipelineVersion.Name)
 	glog.Infof(
 		"Creating the pipeline version %s/%s in Kubernetes", k8sPipelineVersion.Namespace, k8sPipelineVersion.Name,
 	)
