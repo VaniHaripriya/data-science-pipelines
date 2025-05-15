@@ -74,6 +74,8 @@ var (
 	usePipelinesKubernetesStorage = flag.Bool("pipelinesStoreKubernetes", false, "Store and run pipeline versions in Kubernetes")
 	tlsCertPath                   = flag.String("tlsCertPath", "", "Path to the public tls cert.")
 	tlsCertKeyPath                = flag.String("tlsCertKeyPath", "", "Path to the private tls key cert.")
+	disableWebhook                = flag.Bool("disableWebhook", false, "Set this if pipelinesStoreKubernetes is on but using a global webhook in a separate pod")
+	globalKubernetesWebhookMode   = flag.Bool("globalKubernetesWebhookMode", false, "Set this to run exclusively in Kubernetes Webhook mode")
 )
 
 type RegisterHttpHandlerFromEndpoint func(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) error
@@ -113,6 +115,16 @@ func main() {
 	tlsConfig, err := initCerts()
 	if err != nil {
 		glog.Fatalf("Failed to parse Cert paths. Err: %v", err)
+	backgroundCtx, backgroundCancel := context.WithCancel(signals.SetupSignalHandler())
+	defer backgroundCancel()
+
+	wg := sync.WaitGroup{}
+
+	options := &cm.Options{
+		UsePipelineKubernetesStorage: *usePipelinesKubernetesStorage,
+		GlobalKubernetesWebhookMode:  *globalKubernetesWebhookMode,
+		Context:                      backgroundCtx,
+		WaitGroup:                    &wg,
 	}
 
 	logLevel := *logLevelFlag
@@ -140,15 +152,13 @@ func main() {
 	}
 
 	defer clientManager.Close()
+	webhookOnlyMode := *globalKubernetesWebhookMode
 
-	backgroundCtx, backgroundCancel := context.WithCancel(signals.SetupSignalHandler())
-	defer backgroundCancel()
+	if (*usePipelinesKubernetesStorage && !*disableWebhook) || webhookOnlyMode {
+		if *disableWebhook && webhookOnlyMode {
+			glog.Fatalf("Invalid configuration: globalKubernetesWebhookMode is enabled but the webhook is disabled")
+		}
 
-	wg := sync.WaitGroup{}
-
-	webhookOnlyMode := common.IsOnlyKubernetesWebhookMode()
-
-	if *usePipelinesKubernetesStorage || webhookOnlyMode {
 		wg.Add(1)
 		webhookServer, err := startWebhook(clientManager.ControllerClient(), &wg)
 		if err != nil {
@@ -169,6 +179,7 @@ func main() {
 			wg.Wait()
 			return
 		}
+
 	}
 
 	resourceManager := resource.NewResourceManager(
