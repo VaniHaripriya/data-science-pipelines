@@ -1115,4 +1115,22 @@ message PipelineConfig {
   // Time to live configuration after the pipeline run is completed for
   // ephemeral resources created by the pipeline run.
   int32 resource_ttl = 3;
+
+  // Configuration for the workspace
+  optional WorkspaceConfig workspace = 4;
+}
+
+// Configuration for workspace storage in a pipeline
+message WorkspaceConfig {
+  // Size of the workspace
+  string size = 1;
+
+  // Kubernetes specific configuration for the workspace
+  KubernetesWorkspaceConfig kubernetes = 2;
+}
+
+// Kubernetes-specific workspace configuration
+message KubernetesWorkspaceConfig {
+  // Patch of a PersistentVolumeClaim (PVC) spec to override defaults set on the API server for the workspace PVC
+  google.protobuf.Struct pvc_spec_patch = 1;
 }
