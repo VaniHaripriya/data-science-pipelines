@@ -328,7 +328,7 @@ func (s *UpgradeTests) VerifyPipelines() {
 	require.Nil(t, err)
 	bytes, err := os.ReadFile("../resources/arguments-parameters.yaml")
 	require.Nil(t, err)
-	expected, err := pipelinetemplate.New(bytes, true)
+	expected, err := pipelinetemplate.New(bytes, true, nil)
 	require.Nil(t, err)
 	assert.Equal(t, expected, template)
 }
