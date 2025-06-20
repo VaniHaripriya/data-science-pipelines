@@ -101,6 +101,11 @@ func Test_argo_compiler(t *testing.T) {
 			argoYAMLPath:     "testdata/hello_world_cache_disabled.yaml",
 			compilerOptions:  argocompiler.Options{CacheDisabled: true},
 		},
+		{
+			jobPath:          "../testdata/hello_world.json",
+			platformSpecPath: "../testdata/hello_world_pvc_workspace.json",
+			argoYAMLPath:     "testdata/hello_world_pvc_workspace.yaml",
+		},
 		// retry set at pipeline level only.
 		{
 			jobPath:          "../testdata/nested_pipeline_pipeline_retry.json",
@@ -118,6 +123,11 @@ func Test_argo_compiler(t *testing.T) {
 			jobPath:          "../testdata/nested_pipeline_all_level_retry.json",
 			platformSpecPath: "",
 			argoYAMLPath:     "testdata/nested_pipeline_all_level_retry.yaml",
+		},
+		{
+			jobPath:          "../testdata/final_status_state.json",
+			platformSpecPath: "",
+			argoYAMLPath:     "testdata/final_status_state.yaml",
 		},
 	}
 	for _, tt := range tests {

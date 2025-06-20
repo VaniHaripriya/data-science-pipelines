@@ -101,8 +101,9 @@ type ClientManagerInterface interface {
 }
 
 type ResourceManagerOptions struct {
-	CollectMetrics bool `json:"collect_metrics,omitempty"`
-	CacheDisabled  bool `json:"cache_disabled,omitempty"`
+	CollectMetrics bool                              `json:"collect_metrics,omitempty"`
+	CacheDisabled  bool                              `json:"cache_disabled,omitempty"`
+	DefaultPVCSpec *corev1.PersistentVolumeClaimSpec `json:"workspace,omitempty"`
 }
 
 type ResourceManager struct {
@@ -341,6 +342,11 @@ func (r *ResourceManager) CreatePipeline(p *model.Pipeline) (*model.Pipeline, er
 	if p.Name == "" {
 		return nil, util.NewInvalidInputError("pipeline's name cannot be empty")
 	}
+
+	if p.DisplayName == "" {
+		p.DisplayName = p.Name
+	}
+
 	// Create a record in KFP DB (only pipelines table)
 	newPipeline, err := r.pipelineStore.CreatePipeline(p)
 	if err != nil {
@@ -370,7 +376,7 @@ func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv
 	if pipelineSpecURI != "" {
 		pv.PipelineSpecURI = pipelineSpecURI
 	}
-	tmpl, err := template.New(pipelineSpecBytes, r.options.CacheDisabled)
+	tmpl, err := template.New(pipelineSpecBytes, r.options.CacheDisabled, r.options.DefaultPVCSpec)
 	if err != nil {
 		return nil, nil, util.Wrap(err, "Failed to create a pipeline and a pipeline version due to template creation error")
 	}
@@ -395,6 +401,15 @@ func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv
 	} else if p.Name == "" {
 		p.Name = pv.Name
 	}
+
+	if pv.DisplayName == "" {
+		pv.DisplayName = pv.Name
+	}
+
+	if p.DisplayName == "" {
+		p.DisplayName = p.Name
+	}
+
 	// Parse parameters
 	paramsJSON, err := tmpl.ParametersJSON()
 	if err != nil {
@@ -494,9 +509,10 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 	}
 	run.RunDetails.CreatedAtInSec = r.time.Now().Unix()
 	runWorkflowOptions := template.RunWorkflowOptions{
-		RunId:         run.UUID,
-		RunAt:         run.RunDetails.CreatedAtInSec,
-		CacheDisabled: r.options.CacheDisabled,
+		RunId:          run.UUID,
+		RunAt:          run.RunDetails.CreatedAtInSec,
+		CacheDisabled:  r.options.CacheDisabled,
+		DefaultPVCSpec: r.options.DefaultPVCSpec,
 	}
 	executionSpec, err := tmpl.RunWorkflow(run, runWorkflowOptions)
 	if err != nil {
@@ -1093,7 +1109,7 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 			return nil, util.Wrap(err, "Failed to validate the input parameters on the latest pipeline version")
 		}
 
-		tmpl, err := template.New(manifest, r.options.CacheDisabled)
+		tmpl, err := template.New(manifest, r.options.CacheDisabled, r.options.DefaultPVCSpec)
 		if err != nil {
 			return nil, util.Wrap(err, "Failed to fetch a template with an invalid pipeline spec manifest")
 		}
@@ -1479,7 +1495,7 @@ func (r *ResourceManager) fetchTemplateFromPipelineSpec(pipelineSpec *model.Pipe
 			return nil, "", util.NewInvalidInputError("Failed to fetch a template with an empty pipeline spec manifest")
 		}
 	}
-	tmpl, err := template.New([]byte(manifest), r.options.CacheDisabled)
+	tmpl, err := template.New([]byte(manifest), r.options.CacheDisabled, r.options.DefaultPVCSpec)
 	if err != nil {
 		return nil, "", util.Wrap(err, "Failed to fetch a template with an invalid pipeline spec manifest")
 	}
@@ -1638,7 +1654,7 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 	}
 
 	// Create a template
-	tmpl, err := template.New(pipelineSpecBytes, r.options.CacheDisabled)
+	tmpl, err := template.New(pipelineSpecBytes, r.options.CacheDisabled, r.options.DefaultPVCSpec)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create a pipeline version due to template creation error")
 	}
@@ -1658,6 +1674,11 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 		}
 		pv.Name = pipelineSpecName
 	}
+
+	if pv.DisplayName == "" {
+		pv.DisplayName = pv.Name
+	}
+
 	// Parse parameters
 	paramsJSON, err := tmpl.ParametersJSON()
 	if err != nil {
