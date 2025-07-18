@@ -2,6 +2,8 @@
 
 ## Features
 
+* feat(sdk): Add support for compiling pipelines to Kubernetes native format in SDK (#12012)
+
 ## Breaking changes
 
 ## Deprecations
@@ -29,6 +31,7 @@
 ## Bug fixes and other changes
 
 * Depends on `google-cloud-storage>=2.2.1,<4` [\#11735](https://github.com/kubeflow/pipelines/pull/11735)
+* Fixed missing `kfp.__version__` when installing SDK via `pip install -e`. [\#11997](https://github.com/kubeflow/pipelines/pull/11997)
 
 # 2.12.2
 
