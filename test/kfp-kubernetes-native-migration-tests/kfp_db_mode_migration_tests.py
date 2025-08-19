@@ -1,0 +1,197 @@
+# Copyright 2025 The Kubeflow Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import json
+import os
+import sys
+import time
+import tempfile
+import unittest
+import subprocess
+import requests
+from pathlib import Path
+from unittest.mock import patch
+
+# Add the tools directory to path to import migration module
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools/k8s-native'))
+
+from migration import migrate
+
+KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
+TIMEOUT_SECONDS = int(os.environ.get('TIMEOUT_SECONDS', '2700'))
+CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, *([os.path.pardir] * 2)))
+
+class TestMigrationIntegration(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """Set up test environment."""
+        cls.kfp_host = KFP_ENDPOINT.replace('http://', '').replace('https://', '').split(':')[0]
+        cls.kfp_port = KFP_ENDPOINT.split(':')[-1].split('/')[0] if ':' in KFP_ENDPOINT else '8888'
+        cls.api_base = f"{KFP_ENDPOINT}/api/v1"
+        cls.temp_dir = tempfile.mkdtemp()
+        
+        # Load test data created by create_test_pipelines.py
+        test_data_file = Path("migration_test_data.json")
+        if test_data_file.exists():
+            with open(test_data_file) as f:
+                cls.test_data = json.load(f)
+        else:
+            cls.test_data = {"pipelines": [], "experiments": [], "runs": [], "recurring_runs": []}
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up test environment."""
+        import shutil
+        shutil.rmtree(cls.temp_dir)
+
+    def setUp(self):
+        """Set up for each test."""
+        self.output_dir = Path(self.temp_dir) / f"migration_output_{self._testMethodName}"
+        self.output_dir.mkdir(exist_ok=True)
+
+    def test_migration_single_pipeline_single_version(self): 
+        """Test that the migration script correctly exports a single pipeline with one version from DB mode to Kubernetes native format"""
+        
+        with patch('sys.argv', [
+            'migration.py',
+            '--kfp-server-host', KFP_ENDPOINT,
+            '--output', str(self.output_dir),
+            '--namespace', 'kubeflow'
+        ]):
+            migrate()        
+        
+        yaml_files = list(self.output_dir.glob("*.yaml"))
+        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
+        
+        pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name]
+        self.assertGreaterEqual(len(pipeline_files), 1, "Should have files for simple pipeline")        
+        
+        for yaml_file in yaml_files:
+            content = yaml_file.read_text()
+            if "kind: Pipeline" in content or "kind: PipelineVersion" in content:
+                self.assertIn("pipelines.kubeflow.org/original-id", content, "Should have original ID annotation")
+
+    def test_migration_single_pipeline_multiple_versions_same_spec(self):
+        """Test that the migration script correctly exports a single pipeline with multiple versions that have the same specification"""
+        
+       with patch('sys.argv', [
+            'migration.py',
+            '--kfp-server-host', KFP_ENDPOINT,
+            '--output', str(self.output_dir),
+            '--namespace', 'kubeflow'
+        ]):
+            migrate()
+                
+        yaml_files = list(self.output_dir.glob("*.yaml"))
+        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
+        
+        version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])
+        self.assertGreaterEqual(version_count, 2, "Should have at least 2 pipeline versions")        
+        
+        for yaml_file in yaml_files:
+            content = yaml_file.read_text()
+            if "kind: PipelineVersion" in content:
+                self.assertIn("pipelines.kubeflow.org/original-id", content, "Should have original ID annotation")
+
+    def test_migration_single_pipeline_multiple_versions_different_specs(self):
+        """Test that the migration script correctly exports a single pipeline with multiple versions that have different specifications"""
+        
+        with patch('sys.argv', [
+            'migration.py',
+            '--kfp-server-host', KFP_ENDPOINT,
+            '--output', str(self.output_dir),
+            '--namespace', 'kubeflow'
+        ]):
+            migrate()        
+        
+        yaml_files = list(self.output_dir.glob("*.yaml"))
+        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
+       
+        complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
+        self.assertGreaterEqual(len(complex_pipeline_files), 2, "Complex pipeline should have multiple versions")        
+       
+        version_contents = [f.read_text() for f in complex_pipeline_files if "kind: PipelineVersion" in f.read_text()]
+        self.assertGreaterEqual(len(version_contents), 2, "Should have multiple version contents")        
+        
+        has_platform_spec = any("platformSpec" in content for content in version_contents)
+        no_platform_spec = any("platformSpec" not in content for content in version_contents)
+        self.assertTrue(has_platform_spec and no_platform_spec, "Should have versions with and without platformSpec")
+
+    def test_migration_multiple_pipelines_single_version_each(self):
+        """Test that the migration script correctly exports multiple pipelines, each with a single version"""
+       
+        with patch('sys.argv', [
+            'migration.py',
+            '--kfp-server-host', KFP_ENDPOINT,
+            '--output', str(self.output_dir),
+            '--namespace', 'kubeflow'
+        ]):
+            migrate()        
+        
+        yaml_files = list(self.output_dir.glob("*.yaml"))
+        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
+       
+        pipeline_count = len([f for f in yaml_files if "kind: Pipeline" in f.read_text()])
+        version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])        
+        
+        self.assertGreaterEqual(pipeline_count, 2, "Should have at least 2 pipelines")
+        self.assertGreaterEqual(version_count, 2, "Should have at least 2 pipeline versions")
+
+    def test_migration_multiple_pipelines_multiple_versions_different_specs(self):
+        """Test that the migration script correctly exports multiple pipelines with multiple versions having different specifications"""
+        
+        with patch('sys.argv', [
+            'migration.py',
+            '--kfp-server-host', KFP_ENDPOINT,
+            '--output', str(self.output_dir),
+            '--namespace', 'kubeflow'
+        ]):
+            migrate()        
+        
+        yaml_files = list(self.output_dir.glob("*.yaml"))
+        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")     
+      
+        pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name or "complex-pipeline" in f.name]
+        self.assertGreaterEqual(len(pipeline_files), 2, "Should have files for both pipelines")       
+       
+        complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
+        self.assertGreaterEqual(len(complex_pipeline_files), 2, "Complex pipeline should have multiple versions")   
+    
+    # def test_migration_with_pipeline_files(self):
+    #     """Test that the migration script correctly exports pipelines created from pipeline files in the valid directory"""
+        
+    #     # This test would require uploading pipeline files from data/pipeline_files/valid
+    #     # For now, we test that the migration script can handle multiple pipelines
+    #     with patch('sys.argv', [
+    #         'migration.py',
+    #         '--kfp-server-host', KFP_ENDPOINT,
+    #         '--output', str(self.output_dir),
+    #         '--namespace', 'kubeflow'
+    #     ]):
+    #         migrate()        
+        
+    #     yaml_files = list(self.output_dir.glob("*.yaml"))
+    #     self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
+        
+    #     # Verify that all created pipelines were migrated
+    #     pipeline_count = len([f for f in yaml_files if "kind: Pipeline" in f.read_text()])
+    #     version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])
+        
+    #     self.assertGreaterEqual(pipeline_count, 2, "Should have migrated all pipelines")
+    #     self.assertGreaterEqual(version_count, 2, "Should have migrated all pipeline versions")
+
+
+if __name__ == '__main__':
+    unittest.main()
