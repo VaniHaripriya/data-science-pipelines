@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-KFP_HOST = "http://localhost:8080"
+KFP_HOST = "http://localhost:8888"
 API_BASE = f"{KFP_HOST}/api/v1"
 
 def create_pipeline(name, description, pipeline_spec):
