@@ -92,8 +92,25 @@ jobs:
         run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp-db-mode-migration-tests.py -v
         continue-on-error: true
 
-      - name: Switch KFP to K8s mode
+      - name: Install cert-manager
         if: ${{ steps.run-db-mode-tests.outcome == 'success' }}
+        id: install-cert-manager
+        run: |
+          echo "Installing cert-manager..."
+
+          # Install cert-manager using the official installation method
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+
+          # Wait for cert-manager to be ready
+          kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
+          kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-cainjector -n cert-manager
+          kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+
+          echo "cert-manager installation completed"
+        continue-on-error: true
+
+      - name: Switch KFP to K8s mode
+        if: ${{ steps.install-cert-manager.outcome == 'success' }}
         id: switch-to-k8s-mode
         run: |
           echo "Switching KFP from DB mode to K8s mode..."
