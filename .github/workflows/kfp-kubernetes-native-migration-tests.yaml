@@ -89,7 +89,7 @@ jobs:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp-db-mode-migration-tests.py -v
+        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Install cert-manager
@@ -149,7 +149,7 @@ jobs:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/k8s-mode-migration-tests.py -v
+        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Collect failed logs
