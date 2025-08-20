@@ -30,17 +30,28 @@ def create_pipeline(name, description, pipeline_spec):
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create pipeline using KFP client
-        pipeline = client.create_pipeline(
+        # Create a temporary pipeline YAML file
+        import tempfile
+        import yaml
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(pipeline_spec, f)
+            pipeline_file = f.name
+        
+        # Upload pipeline using KFP client
+        pipeline = client.upload_pipeline(
+            pipeline_package_path=pipeline_file,
             pipeline_name=name,
-            description=description,
-            pipeline_spec=pipeline_spec
+            description=description
         )
         
+        # Clean up temporary file
+        os.unlink(pipeline_file)
+        
         return {
-            "id": pipeline.id,
-            "name": pipeline.name,
-            "description": pipeline.description,
+            "id": pipeline.pipeline_id,
+            "name": pipeline.display_name,
+            "description": description,
             "pipeline_spec": pipeline_spec
         }
     except Exception as e:
@@ -52,16 +63,27 @@ def create_pipeline_version(pipeline_id, name, pipeline_spec):
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create pipeline version using KFP client
-        version = client.create_pipeline_version(
-            pipeline_id=pipeline_id,
+        # Create a temporary pipeline YAML file
+        import tempfile
+        import yaml
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(pipeline_spec, f)
+            pipeline_file = f.name
+        
+        # Upload pipeline version using KFP client
+        version = client.upload_pipeline_version(
+            pipeline_package_path=pipeline_file,
             pipeline_version_name=name,
-            pipeline_spec=pipeline_spec
+            pipeline_id=pipeline_id
         )
         
+        # Clean up temporary file
+        os.unlink(pipeline_file)
+        
         return {
-            "id": version.id,
-            "name": version.name,
+            "id": version.pipeline_version_id,
+            "name": version.display_name,
             "pipeline_id": pipeline_id,
             "pipeline_spec": pipeline_spec
         }
@@ -81,9 +103,9 @@ def create_experiment(name, description):
         )
         
         return {
-            "id": experiment.id,
-            "name": experiment.name,
-            "description": experiment.description
+            "id": experiment.experiment_id,
+            "name": experiment.display_name,
+            "description": description
         }
     except Exception as e:
         print(f"Failed to create experiment {name}: {e}")
@@ -101,12 +123,12 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
             run_name=name,
             pipeline_id=pipeline_id,
             version_id=pipeline_version_id,
-            parameters=parameters
+            arguments=parameters
         )
         
         return {
-            "id": run.id,
-            "name": run.name,
+            "id": run.run_id,
+            "name": run.display_name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
@@ -138,12 +160,12 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
             pipeline_id=pipeline_id,
             version_id=pipeline_version_id,
             cron_expression=cron_expression,
-            parameters=parameters
+            arguments=parameters
         )
         
         return {
-            "id": recurring_run.id,
-            "name": recurring_run.name,
+            "id": recurring_run.recurring_run_id,
+            "name": recurring_run.display_name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
