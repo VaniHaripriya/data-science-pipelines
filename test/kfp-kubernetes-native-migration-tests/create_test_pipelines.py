@@ -116,23 +116,39 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create run using the runs API directly (like in versioned pipeline examples)
-        run_body = {
-            "name": name,
-            "pipeline_spec": {
-                "parameters": parameters or []
-            },
-            "resource_references": [
-                {"key": {"id": pipeline_version_id, "type": 4}, "relationship": 2},  # Pipeline version
-                {"key": {"id": experiment_id, "type": 1}, "relationship": 1}  # Experiment
-            ]
-        }
+        # Create run using the KFP client's internal API
+        import kfp_server_api
         
-        run = client.runs.create_run(run_body)
+        # Create the run body using the proper API model
+        run_body = kfp_server_api.V1Run(
+            name=name,
+            pipeline_spec=kfp_server_api.V1PipelineSpec(
+                parameters=parameters or []
+            ),
+            resource_references=[
+                kfp_server_api.V1ResourceReference(
+                    key=kfp_server_api.V1ResourceKey(
+                        id=pipeline_version_id,
+                        type=kfp_server_api.V1ResourceType.PIPELINE_VERSION
+                    ),
+                    relationship=kfp_server_api.V1Relationship.OWNER
+                ),
+                kfp_server_api.V1ResourceReference(
+                    key=kfp_server_api.V1ResourceKey(
+                        id=experiment_id,
+                        type=kfp_server_api.V1ResourceType.EXPERIMENT
+                    ),
+                    relationship=kfp_server_api.V1Relationship.OWNER
+                )
+            ]
+        )
+        
+        # Use the client's internal run API
+        run_data = client._run_api.run_service_create_run(run=run_body)
         
         return {
-            "id": run.run_id,
-            "name": run.display_name or name,
+            "id": run_data.run_id,
+            "name": run_data.name or name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
@@ -157,19 +173,39 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create recurring run using KFP client
-        recurring_run = client.create_recurring_run(
-            experiment_id=experiment_id,
-            job_name=name,
-            pipeline_id=pipeline_id,
-            version_id=pipeline_version_id,
-            cron_expression=cron_expression,
-            params=parameters  # Use 'params' not 'arguments'
+        # Create recurring run using the KFP client's internal API
+        import kfp_server_api
+        
+        # Create the recurring run body using the proper API model
+        recurring_run_body = kfp_server_api.V1Job(
+            name=name,
+            pipeline_spec=kfp_server_api.V1PipelineSpec(
+                pipeline_id=pipeline_id,
+                pipeline_version_id=pipeline_version_id,
+                parameters=parameters or []
+            ),
+            resource_references=[
+                kfp_server_api.V1ResourceReference(
+                    key=kfp_server_api.V1ResourceKey(
+                        id=experiment_id,
+                        type=kfp_server_api.V1ResourceType.EXPERIMENT
+                    ),
+                    relationship=kfp_server_api.V1Relationship.OWNER
+                )
+            ],
+            trigger=kfp_server_api.V1Trigger(
+                cron_schedule=kfp_server_api.V1CronSchedule(
+                    cron=cron_expression
+                )
+            )
         )
         
+        # Use the client's internal job API
+        recurring_run_data = client._job_api.run_service_create_job(job=recurring_run_body)
+        
         return {
-            "id": recurring_run.recurring_run_id,
-            "name": recurring_run.display_name or name,
+            "id": recurring_run_data.id,
+            "name": recurring_run_data.name or name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
