@@ -88,7 +88,7 @@ jobs:
           curl -s http://localhost:8888/apis/v2beta1/pipelines | jq '.pipelines[] | {name: .name, display_name: .display_name}' || echo "Could not verify pipelines"
         continue-on-error: true
 
-                  - name: Run DB mode migration tests
+      - name: Run DB mode migration tests
         if: ${{ steps.create-test-pipelines.outcome == 'success' }}
         id: run-db-mode-tests
         env:
@@ -97,14 +97,14 @@ jobs:
           KFP_ENDPOINT: "http://localhost:8888"
         run: |
           echo "Running DB mode migration tests..."
-          
+
           # First, verify test pipelines exist before migration
           echo "Pipelines before migration:"
           curl -s http://localhost:8888/apis/v2beta1/pipelines | jq '.pipelines[] | {name: .name, display_name: .display_name}' || echo "Could not list pipelines"
-          
+
           # Run the migration tests
           python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
-          
+
           # Show what pipelines exist after migration
           echo "Pipelines after migration:"
           curl -s http://localhost:8888/apis/v2beta1/pipelines | jq '.pipelines[] | {name: .name, display_name: .display_name}' || echo "Could not list pipelines"
