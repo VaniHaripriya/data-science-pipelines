@@ -16,125 +16,156 @@ import time
 import requests
 import subprocess
 import sys
+import os
 from pathlib import Path
+import kfp
 
-KFP_HOST = "http://localhost:8888"
-API_BASE = f"{KFP_HOST}/api/v1"
+# Environment variables
+KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
+KFP_UI_ENDPOINT = os.environ.get('KFP_UI_ENDPOINT', 'http://localhost:8080')
+KFP_NAMESPACE = os.environ.get('KFP_NAMESPACE', 'kubeflow')
 
 def create_pipeline(name, description, pipeline_spec):
     """Create a pipeline in KFP Database mode."""
-    url = f"{API_BASE}/pipelines"
-    
-    data = {
-        "name": name,
-        "description": description,
-        "pipeline_spec": pipeline_spec
-    }
-    
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Failed to create pipeline {name}: {response.text}")
+    try:
+        client = kfp.Client(host=KFP_ENDPOINT)
+        
+        # Create pipeline using KFP client
+        pipeline = client.create_pipeline(
+            pipeline_name=name,
+            description=description,
+            pipeline_spec=pipeline_spec
+        )
+        
+        return {
+            "id": pipeline.id,
+            "name": pipeline.name,
+            "description": pipeline.description,
+            "pipeline_spec": pipeline_spec
+        }
+    except Exception as e:
+        print(f"Failed to create pipeline {name}: {e}")
         return None
 
 def create_pipeline_version(pipeline_id, name, pipeline_spec):
     """Create a pipeline version in KFP Database mode."""
-    url = f"{API_BASE}/pipelines/{pipeline_id}/versions"
-    
-    data = {
-        "name": name,
-        "pipeline_spec": pipeline_spec
-    }
-    
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Failed to create pipeline version {name}: {response.text}")
+    try:
+        client = kfp.Client(host=KFP_ENDPOINT)
+        
+        # Create pipeline version using KFP client
+        version = client.create_pipeline_version(
+            pipeline_id=pipeline_id,
+            pipeline_version_name=name,
+            pipeline_spec=pipeline_spec
+        )
+        
+        return {
+            "id": version.id,
+            "name": version.name,
+            "pipeline_id": pipeline_id,
+            "pipeline_spec": pipeline_spec
+        }
+    except Exception as e:
+        print(f"Failed to create pipeline version {name}: {e}")
         return None
 
 def create_experiment(name, description):
     """Create an experiment in KFP Database mode."""
-    url = f"{API_BASE}/experiments"
-    
-    data = {
-        "name": name,
-        "description": description
-    }
-    
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Failed to create experiment {name}: {response.text}")
+    try:
+        client = kfp.Client(host=KFP_ENDPOINT)
+        
+        # Create experiment using KFP client
+        experiment = client.create_experiment(
+            name=name,
+            description=description
+        )
+        
+        return {
+            "id": experiment.id,
+            "name": experiment.name,
+            "description": experiment.description
+        }
+    except Exception as e:
+        print(f"Failed to create experiment {name}: {e}")
         return None
 
 def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters=None):
     """Create a pipeline run in KFP Database mode."""
-    url = f"{API_BASE}/runs"
-    
-    data = {
-        "name": name,
-        "pipeline_spec": {
-            "pipeline_id": pipeline_id,
-            "pipeline_version_id": pipeline_version_id
-        },
-        "resource_references": [
-            {
-                "key": {
-                    "type": "EXPERIMENT",
-                    "id": experiment_id
-                },
-                "relationship": "OWNER"
-            }
-        ]
-    }
-    
-    if parameters:
-        data["parameters"] = parameters
-    
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Failed to create run {name}: {response.text}")
+    try:
+        client = kfp.Client(host=KFP_ENDPOINT)
+        
+        # Create run using KFP client
+        run = client.create_run_from_pipeline_func(
+            pipeline_func=None,  # We'll use pipeline_id instead
+            experiment_id=experiment_id,
+            run_name=name,
+            pipeline_id=pipeline_id,
+            version_id=pipeline_version_id,
+            parameters=parameters
+        )
+        
+        return {
+            "id": run.id,
+            "name": run.name,
+            "pipeline_spec": {
+                "pipeline_id": pipeline_id,
+                "pipeline_version_id": pipeline_version_id
+            },
+            "resource_references": [
+                {
+                    "key": {
+                        "type": "EXPERIMENT",
+                        "id": experiment_id
+                    },
+                    "relationship": "OWNER"
+                }
+            ],
+            "parameters": parameters
+        }
+    except Exception as e:
+        print(f"Failed to create run {name}: {e}")
         return None
 
 def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, cron_expression, parameters=None):
     """Create a recurring run in KFP Database mode."""
-    url = f"{API_BASE}/recurringruns"
-    
-    data = {
-        "name": name,
-        "pipeline_spec": {
-            "pipeline_id": pipeline_id,
-            "pipeline_version_id": pipeline_version_id
-        },
-        "resource_references": [
-            {
-                "key": {
-                    "type": "EXPERIMENT",
-                    "id": experiment_id
-                },
-                "relationship": "OWNER"
-            }
-        ],
-        "trigger": {
-            "cron_schedule": {
-                "cron": cron_expression
-            }
+    try:
+        client = kfp.Client(host=KFP_ENDPOINT)
+        
+        # Create recurring run using KFP client
+        recurring_run = client.create_recurring_run(
+            experiment_id=experiment_id,
+            job_name=name,
+            pipeline_id=pipeline_id,
+            version_id=pipeline_version_id,
+            cron_expression=cron_expression,
+            parameters=parameters
+        )
+        
+        return {
+            "id": recurring_run.id,
+            "name": recurring_run.name,
+            "pipeline_spec": {
+                "pipeline_id": pipeline_id,
+                "pipeline_version_id": pipeline_version_id
+            },
+            "resource_references": [
+                {
+                    "key": {
+                        "type": "EXPERIMENT",
+                        "id": experiment_id
+                    },
+                    "relationship": "OWNER"
+                }
+            ],
+            "trigger": {
+                "cron_schedule": {
+                    "cron": cron_expression
+                }
+            },
+            "parameters": parameters
         }
-    }
-    
-    if parameters:
-        data["parameters"] = parameters
-    
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Failed to create recurring run {name}: {response.text}")
+    except Exception as e:
+        print(f"Failed to create recurring run {name}: {e}")
         return None
 
 
