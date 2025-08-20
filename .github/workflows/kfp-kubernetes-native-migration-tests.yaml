@@ -82,10 +82,6 @@ jobs:
         run: |
           echo "Creating test pipelines in DB mode..."
           python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
-
-          # Verify test pipelines were created
-          echo "Verifying test pipelines were created..."
-          curl -s http://localhost:8888/apis/v2beta1/pipelines | jq '.pipelines[] | {name: .name, display_name: .display_name}' || echo "Could not verify pipelines"
         continue-on-error: true
 
       - name: Run DB mode migration tests
@@ -96,18 +92,8 @@ jobs:
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
         run: |
-          echo "Running DB mode migration tests..."
-
-          # First, verify test pipelines exist before migration
-          echo "Pipelines before migration:"
-          curl -s http://localhost:8888/apis/v2beta1/pipelines | jq '.pipelines[] | {name: .name, display_name: .display_name}' || echo "Could not list pipelines"
-
-          # Run the migration tests
+          echo "Running DB mode migration tests..."       
           python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
-
-          # Show what pipelines exist after migration
-          echo "Pipelines after migration:"
-          curl -s http://localhost:8888/apis/v2beta1/pipelines | jq '.pipelines[] | {name: .name, display_name: .display_name}' || echo "Could not list pipelines"
         continue-on-error: true
 
       - name: Install cert-manager
@@ -116,7 +102,7 @@ jobs:
         run: |
           echo "Installing cert-manager..."
 
-          # Install cert-manager using the official installation method
+          # Install cert-manager 
           kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
 
           # Wait for cert-manager to be ready
@@ -132,14 +118,12 @@ jobs:
         id: switch-to-k8s-mode
         run: |
           echo "Switching KFP from DB mode to K8s mode..."
-
-          # Stop KFP in DB mode
           kubectl delete deployment ml-pipeline -n kubeflow
 
           # Wait for deployment to be deleted
           kubectl wait --for=delete deployment/ml-pipeline -n kubeflow --timeout=60s
 
-          # Deploy KFP in K8s mode using the kubernetes-native overlay
+          # Deploy KFP in K8s mode
           echo "Deploying KFP in K8s mode..."
           kubectl apply -k "manifests/kustomize/env/cert-manager/platform-agnostic-k8s-native/"
 
@@ -149,19 +133,8 @@ jobs:
           echo "KFP mode switch completed - now running in K8s mode"
         continue-on-error: true
 
-      - name: Wait for KFP K8s mode to be ready
-        if: ${{ steps.switch-to-k8s-mode.outcome == 'success' }}
-        id: wait-for-k8s-mode
-        run: |
-          echo "Waiting for KFP K8s mode to be ready..."
-          # Wait for KFP API to be available in K8s mode
-          # This would include proper health checks
-          sleep 30
-          echo "KFP K8s mode is ready"
-        continue-on-error: true
-
       - name: Apply migrated YAML files to K8s cluster
-        if: ${{ steps.wait-for-k8s-mode.outcome == 'success' }}
+        if: ${{ steps.switch-to-k8s-mode.outcome == 'success' }}
         id: apply-migrated-yaml
         run: |
           echo "Applying migrated YAML files to K8s cluster..."
@@ -180,6 +153,9 @@ jobs:
           echo "Checking tools directory..."
           find ./tools/k8s-native -name "*.yaml" -type f 2>/dev/null || echo "No YAML files found in tools directory"
 
+          echo "Checking default migration output directory..."
+          find ./kfp-exported-pipelines -name "*.yaml" -type f 2>/dev/null || echo "No YAML files found in default migration directory"
+
           # Apply YAML files if found
           echo "Applying YAML files..."
 
@@ -195,6 +171,13 @@ jobs:
             find ./tools/k8s-native -name "*.yaml" -exec kubectl apply -f {} -n kubeflow \;
           else
             echo "No YAML files found in tools directory"
+          fi
+
+          # Look in the default migration output directory
+          if find ./kfp-exported-pipelines -name "*.yaml" -type f 2>/dev/null; then
+            find ./kfp-exported-pipelines -name "*.yaml" -exec kubectl apply -f {} -n kubeflow \;
+          else
+            echo "No YAML files found in default migration directory"
           fi
 
           # Wait for pipelines to be created
