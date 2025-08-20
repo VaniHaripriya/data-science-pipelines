@@ -204,16 +204,58 @@ def main():
     
     # Create simple pipeline
     simple_pipeline_spec = {
+        "schemaVersion": "2.1.0",
+        "sdkVersion": "kfp-2.0.0",
         "pipelineInfo": {
             "name": "simple-pipeline"
+        },
+        "components": {
+            "comp-print-hello": {
+                "executorLabel": "exec-print-hello",
+                "inputDefinitions": {
+                    "parameters": {
+                        "message": {
+                            "parameterType": "STRING"
+                        }
+                    }
+                }
+            }
+        },
+        "deploymentSpec": {
+            "executors": {
+                "exec-print-hello": {
+                    "container": {
+                        "image": "python:3.9",
+                        "command": ["echo"],
+                        "args": ["{{$.inputs.parameters['message']}}"]
+                    }
+                }
+            }
         },
         "root": {
             "dag": {
                 "tasks": {
                     "print-hello": {
                         "componentRef": {
+                            "name": "comp-print-hello"
+                        },
+                        "inputs": {
+                            "parameters": {
+                                "message": {
+                                    "componentInputParameter": "message"
+                                }
+                            }
+                        },
+                        "taskInfo": {
                             "name": "print-hello"
                         }
+                    }
+                }
+            },
+            "inputDefinitions": {
+                "parameters": {
+                    "message": {
+                        "parameterType": "STRING"
                     }
                 }
             }
@@ -233,21 +275,117 @@ def main():
     
     # Create pipeline with multiple versions and different specs
     complex_pipeline_spec_v1 = {
+        "schemaVersion": "2.1.0",
+        "sdkVersion": "kfp-2.0.0",
         "pipelineInfo": {
             "name": "complex-pipeline"
+        },
+        "components": {
+            "comp-data-preprocessing": {
+                "executorLabel": "exec-data-preprocessing",
+                "inputDefinitions": {
+                    "parameters": {
+                        "input_data": {
+                            "parameterType": "STRING"
+                        }
+                    }
+                },
+                "outputDefinitions": {
+                    "artifacts": {
+                        "processed_data": {
+                            "artifactType": {
+                                "schemaTitle": "system.Dataset",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                }
+            },
+            "comp-model-training": {
+                "executorLabel": "exec-model-training",
+                "inputDefinitions": {
+                    "artifacts": {
+                        "processed_data": {
+                            "artifactType": {
+                                "schemaTitle": "system.Dataset",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                },
+                "outputDefinitions": {
+                    "artifacts": {
+                        "model": {
+                            "artifactType": {
+                                "schemaTitle": "system.Model",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "deploymentSpec": {
+            "executors": {
+                "exec-data-preprocessing": {
+                    "container": {
+                        "image": "python:3.9",
+                        "command": ["echo"],
+                        "args": ["Processing data: {{$.inputs.parameters['input_data']}}"]
+                    }
+                },
+                "exec-model-training": {
+                    "container": {
+                        "image": "python:3.9",
+                        "command": ["echo"],
+                        "args": ["Training model with processed data"]
+                    }
+                }
+            }
         },
         "root": {
             "dag": {
                 "tasks": {
                     "data-preprocessing": {
                         "componentRef": {
+                            "name": "comp-data-preprocessing"
+                        },
+                        "inputs": {
+                            "parameters": {
+                                "input_data": {
+                                    "componentInputParameter": "input_data"
+                                }
+                            }
+                        },
+                        "taskInfo": {
                             "name": "data-preprocessing"
                         }
                     },
                     "model-training": {
                         "componentRef": {
+                            "name": "comp-model-training"
+                        },
+                        "dependentTasks": ["data-preprocessing"],
+                        "inputs": {
+                            "artifacts": {
+                                "processed_data": {
+                                    "taskOutputArtifact": {
+                                        "producerTask": "data-preprocessing",
+                                        "artifactKey": "processed_data"
+                                    }
+                                }
+                            }
+                        },
+                        "taskInfo": {
                             "name": "model-training"
                         }
+                    }
+                }
+            },
+            "inputDefinitions": {
+                "parameters": {
+                    "input_data": {
+                        "parameterType": "STRING"
                     }
                 }
             }
@@ -255,26 +393,178 @@ def main():
     }
     
     complex_pipeline_spec_v2 = {
+        "schemaVersion": "2.1.0",
+        "sdkVersion": "kfp-2.0.0",
         "pipelineInfo": {
             "name": "complex-pipeline"
+        },
+        "components": {
+            "comp-data-preprocessing": {
+                "executorLabel": "exec-data-preprocessing",
+                "inputDefinitions": {
+                    "parameters": {
+                        "input_data": {
+                            "parameterType": "STRING"
+                        }
+                    }
+                },
+                "outputDefinitions": {
+                    "artifacts": {
+                        "processed_data": {
+                            "artifactType": {
+                                "schemaTitle": "system.Dataset",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                }
+            },
+            "comp-model-training": {
+                "executorLabel": "exec-model-training",
+                "inputDefinitions": {
+                    "artifacts": {
+                        "processed_data": {
+                            "artifactType": {
+                                "schemaTitle": "system.Dataset",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                },
+                "outputDefinitions": {
+                    "artifacts": {
+                        "model": {
+                            "artifactType": {
+                                "schemaTitle": "system.Model",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                }
+            },
+            "comp-model-evaluation": {
+                "executorLabel": "exec-model-evaluation",
+                "inputDefinitions": {
+                    "artifacts": {
+                        "model": {
+                            "artifactType": {
+                                "schemaTitle": "system.Model",
+                                "schemaVersion": "0.0.1"
+                            }
+                        },
+                        "processed_data": {
+                            "artifactType": {
+                                "schemaTitle": "system.Dataset",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                },
+                "outputDefinitions": {
+                    "artifacts": {
+                        "evaluation_results": {
+                            "artifactType": {
+                                "schemaTitle": "system.Metrics",
+                                "schemaVersion": "0.0.1"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "deploymentSpec": {
+            "executors": {
+                "exec-data-preprocessing": {
+                    "container": {
+                        "image": "python:3.9",
+                        "command": ["echo"],
+                        "args": ["Processing data: {{$.inputs.parameters['input_data']}}"]
+                    }
+                },
+                "exec-model-training": {
+                    "container": {
+                        "image": "python:3.9",
+                        "command": ["echo"],
+                        "args": ["Training model with processed data"]
+                    }
+                },
+                "exec-model-evaluation": {
+                    "container": {
+                        "image": "python:3.9",
+                        "command": ["echo"],
+                        "args": ["Evaluating model performance"]
+                    }
+                }
+            }
         },
         "root": {
             "dag": {
                 "tasks": {
                     "data-preprocessing": {
                         "componentRef": {
+                            "name": "comp-data-preprocessing"
+                        },
+                        "inputs": {
+                            "parameters": {
+                                "input_data": {
+                                    "componentInputParameter": "input_data"
+                                }
+                            }
+                        },
+                        "taskInfo": {
                             "name": "data-preprocessing"
                         }
                     },
                     "model-training": {
                         "componentRef": {
+                            "name": "comp-model-training"
+                        },
+                        "dependentTasks": ["data-preprocessing"],
+                        "inputs": {
+                            "artifacts": {
+                                "processed_data": {
+                                    "taskOutputArtifact": {
+                                        "producerTask": "data-preprocessing",
+                                        "artifactKey": "processed_data"
+                                    }
+                                }
+                            }
+                        },
+                        "taskInfo": {
                             "name": "model-training"
                         }
                     },
                     "model-evaluation": {
                         "componentRef": {
+                            "name": "comp-model-evaluation"
+                        },
+                        "dependentTasks": ["model-training"],
+                        "inputs": {
+                            "artifacts": {
+                                "model": {
+                                    "taskOutputArtifact": {
+                                        "producerTask": "model-training",
+                                        "artifactKey": "model"
+                                    }
+                                },
+                                "processed_data": {
+                                    "taskOutputArtifact": {
+                                        "producerTask": "data-preprocessing",
+                                        "artifactKey": "processed_data"
+                                    }
+                                }
+                            }
+                        },
+                        "taskInfo": {
                             "name": "model-evaluation"
                         }
+                    }
+                }
+            },
+            "inputDefinitions": {
+                "parameters": {
+                    "input_data": {
+                        "parameterType": "STRING"
                     }
                 }
             }
