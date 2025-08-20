@@ -121,8 +121,6 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
             pipeline_func=None,  # We'll use pipeline_id instead
             experiment_id=experiment_id,
             run_name=name,
-            pipeline_id=pipeline_id,
-            version_id=pipeline_version_id,
             arguments=parameters
         )
         
@@ -289,37 +287,14 @@ def main():
                             "parameterType": "STRING"
                         }
                     }
-                },
-                "outputDefinitions": {
-                    "artifacts": {
-                        "processed_data": {
-                            "artifactType": {
-                                "schemaTitle": "system.Dataset",
-                                "schemaVersion": "0.0.1"
-                            }
-                        }
-                    }
                 }
             },
             "comp-model-training": {
                 "executorLabel": "exec-model-training",
                 "inputDefinitions": {
-                    "artifacts": {
-                        "processed_data": {
-                            "artifactType": {
-                                "schemaTitle": "system.Dataset",
-                                "schemaVersion": "0.0.1"
-                            }
-                        }
-                    }
-                },
-                "outputDefinitions": {
-                    "artifacts": {
-                        "model": {
-                            "artifactType": {
-                                "schemaTitle": "system.Model",
-                                "schemaVersion": "0.0.1"
-                            }
+                    "parameters": {
+                        "input_data": {
+                            "parameterType": "STRING"
                         }
                     }
                 }
@@ -338,7 +313,7 @@ def main():
                     "container": {
                         "image": "python:3.9",
                         "command": ["echo"],
-                        "args": ["Training model with processed data"]
+                        "args": ["Training model with input: {{$.inputs.parameters['input_data']}}"]
                     }
                 }
             }
@@ -365,14 +340,10 @@ def main():
                         "componentRef": {
                             "name": "comp-model-training"
                         },
-                        "dependentTasks": ["data-preprocessing"],
                         "inputs": {
-                            "artifacts": {
-                                "processed_data": {
-                                    "taskOutputArtifact": {
-                                        "producerTask": "data-preprocessing",
-                                        "artifactKey": "processed_data"
-                                    }
+                            "parameters": {
+                                "input_data": {
+                                    "componentInputParameter": "input_data"
                                 }
                             }
                         },
@@ -407,37 +378,14 @@ def main():
                             "parameterType": "STRING"
                         }
                     }
-                },
-                "outputDefinitions": {
-                    "artifacts": {
-                        "processed_data": {
-                            "artifactType": {
-                                "schemaTitle": "system.Dataset",
-                                "schemaVersion": "0.0.1"
-                            }
-                        }
-                    }
                 }
             },
             "comp-model-training": {
                 "executorLabel": "exec-model-training",
                 "inputDefinitions": {
-                    "artifacts": {
-                        "processed_data": {
-                            "artifactType": {
-                                "schemaTitle": "system.Dataset",
-                                "schemaVersion": "0.0.1"
-                            }
-                        }
-                    }
-                },
-                "outputDefinitions": {
-                    "artifacts": {
-                        "model": {
-                            "artifactType": {
-                                "schemaTitle": "system.Model",
-                                "schemaVersion": "0.0.1"
-                            }
+                    "parameters": {
+                        "input_data": {
+                            "parameterType": "STRING"
                         }
                     }
                 }
@@ -445,28 +393,9 @@ def main():
             "comp-model-evaluation": {
                 "executorLabel": "exec-model-evaluation",
                 "inputDefinitions": {
-                    "artifacts": {
-                        "model": {
-                            "artifactType": {
-                                "schemaTitle": "system.Model",
-                                "schemaVersion": "0.0.1"
-                            }
-                        },
-                        "processed_data": {
-                            "artifactType": {
-                                "schemaTitle": "system.Dataset",
-                                "schemaVersion": "0.0.1"
-                            }
-                        }
-                    }
-                },
-                "outputDefinitions": {
-                    "artifacts": {
-                        "evaluation_results": {
-                            "artifactType": {
-                                "schemaTitle": "system.Metrics",
-                                "schemaVersion": "0.0.1"
-                            }
+                    "parameters": {
+                        "input_data": {
+                            "parameterType": "STRING"
                         }
                     }
                 }
@@ -485,14 +414,14 @@ def main():
                     "container": {
                         "image": "python:3.9",
                         "command": ["echo"],
-                        "args": ["Training model with processed data"]
+                        "args": ["Training model with input: {{$.inputs.parameters['input_data']}}"]
                     }
                 },
                 "exec-model-evaluation": {
                     "container": {
                         "image": "python:3.9",
                         "command": ["echo"],
-                        "args": ["Evaluating model performance"]
+                        "args": ["Evaluating model with input: {{$.inputs.parameters['input_data']}}"]
                     }
                 }
             }
@@ -519,14 +448,10 @@ def main():
                         "componentRef": {
                             "name": "comp-model-training"
                         },
-                        "dependentTasks": ["data-preprocessing"],
                         "inputs": {
-                            "artifacts": {
-                                "processed_data": {
-                                    "taskOutputArtifact": {
-                                        "producerTask": "data-preprocessing",
-                                        "artifactKey": "processed_data"
-                                    }
+                            "parameters": {
+                                "input_data": {
+                                    "componentInputParameter": "input_data"
                                 }
                             }
                         },
@@ -538,20 +463,10 @@ def main():
                         "componentRef": {
                             "name": "comp-model-evaluation"
                         },
-                        "dependentTasks": ["model-training"],
                         "inputs": {
-                            "artifacts": {
-                                "model": {
-                                    "taskOutputArtifact": {
-                                        "producerTask": "model-training",
-                                        "artifactKey": "model"
-                                    }
-                                },
-                                "processed_data": {
-                                    "taskOutputArtifact": {
-                                        "producerTask": "data-preprocessing",
-                                        "artifactKey": "processed_data"
-                                    }
+                            "parameters": {
+                                "input_data": {
+                                    "componentInputParameter": "input_data"
                                 }
                             }
                         },
