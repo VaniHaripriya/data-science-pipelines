@@ -137,32 +137,10 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
         print(f"Failed to create recurring run {name}: {response.text}")
         return None
 
-def wait_for_kfp_ready():
-    """Wait for KFP API to be ready."""
-    max_retries = 30
-    retry_count = 0
-    
-    while retry_count < max_retries:
-        try:
-            response = requests.get(f"{API_BASE}/healthz")
-            if response.status_code == 200:
-                print("KFP API is ready!")
-                return True
-        except requests.exceptions.ConnectionError:
-            pass
-        
-        print(f"Waiting for KFP API to be ready... (attempt {retry_count + 1}/{max_retries})")
-        time.sleep(10)
-        retry_count += 1
-    
-    print("KFP API failed to become ready")
-    return False
+
 
 def main():   
     print("Setting up test environment for KFP migration tests...")    
-   
-    if not wait_for_kfp_ready():
-        sys.exit(1)    
    
     test_data = {
         "pipelines": [],
