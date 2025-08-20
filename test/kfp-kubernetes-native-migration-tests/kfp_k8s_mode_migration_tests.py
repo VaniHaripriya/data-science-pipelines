@@ -29,10 +29,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools/k8s-nati
 from migration import migrate
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
-TIMEOUT_SECONDS = int(os.environ.get('TIMEOUT_SECONDS', '2700'))
-CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, *([os.path.pardir] * 2)))
-
 
 class TestK8sModeMigration(unittest.TestCase):
     """Kubernetes native migration tests that require KFP to be running in K8s mode."""
@@ -40,8 +36,6 @@ class TestK8sModeMigration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test environment."""
-        cls.kfp_host = KFP_ENDPOINT.replace('http://', '').replace('https://', '').split(':')[0]
-        cls.kfp_port = KFP_ENDPOINT.split(':')[-1].split('/')[0] if ':' in KFP_ENDPOINT else '8888'
         cls.api_base = f"{KFP_ENDPOINT}/api/v1"
         cls.temp_dir = tempfile.mkdtemp()        
         
@@ -57,11 +51,6 @@ class TestK8sModeMigration(unittest.TestCase):
         """Clean up test environment."""
         import shutil
         shutil.rmtree(cls.temp_dir)
-
-    def setUp(self):
-        """Set up for each test."""
-        self.output_dir = Path(self.temp_dir) / f"k8s_migration_output_{self._testMethodName}"
-        self.output_dir.mkdir(exist_ok=True)
 
     def test_k8s_mode_experiment_and_run_rerun(self):
         """Test that a pipeline run created in DB mode can be rerun in K8s mode with the same experiment association"""

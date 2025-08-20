@@ -29,17 +29,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools/k8s-nati
 from migration import migrate
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
-TIMEOUT_SECONDS = int(os.environ.get('TIMEOUT_SECONDS', '2700'))
-CURRENT_DIR = os.path.abspath(os.path.dirname(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, *([os.path.pardir] * 2)))
 
 class TestMigrationIntegration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test environment."""
-        cls.kfp_host = KFP_ENDPOINT.replace('http://', '').replace('https://', '').split(':')[0]
-        cls.kfp_port = KFP_ENDPOINT.split(':')[-1].split('/')[0] if ':' in KFP_ENDPOINT else '8888'
-        cls.api_base = f"{KFP_ENDPOINT}/api/v1"
         cls.temp_dir = tempfile.mkdtemp()
         
         # Load test data created by create_test_pipelines.py
@@ -62,7 +56,7 @@ class TestMigrationIntegration(unittest.TestCase):
         self.output_dir.mkdir(exist_ok=True)
 
     def test_migration_single_pipeline_single_version(self): 
-        """Test that the migration script correctly exports a single pipeline with one version from DB mode to Kubernetes native format"""
+        """Test that the migration script correctly exports a single pipeline with single version from DB mode to Kubernetes native format"""
         
         with patch('sys.argv', [
             'migration.py',

@@ -133,77 +133,18 @@ jobs:
           echo "KFP mode switch completed - now running in K8s mode"
         continue-on-error: true
 
-      - name: Apply migrated YAML files to K8s cluster
-        if: ${{ steps.switch-to-k8s-mode.outcome == 'success' }}
-        id: apply-migrated-yaml
-        run: |
-          echo "Applying migrated YAML files to K8s cluster..."
-
-          # Debug: Show current directory and find all YAML files
-          echo "Current directory: $(pwd)"
-          echo "Looking for YAML files..."
-
-          # Find all YAML files in the workspace
-          find . -name "*.yaml" -type f 2>/dev/null | head -20
-
-          # Look in specific directories where migration files might be
-          echo "Checking test directory..."
-          find ./test/kfp-kubernetes-native-migration-tests -name "*.yaml" -type f 2>/dev/null || echo "No YAML files found in test directory"
-
-          echo "Checking tools directory..."
-          find ./tools/k8s-native -name "*.yaml" -type f 2>/dev/null || echo "No YAML files found in tools directory"
-
-          echo "Checking default migration output directory..."
-          find ./kfp-exported-pipelines -name "*.yaml" -type f 2>/dev/null || echo "No YAML files found in default migration directory"
-
-          # Apply YAML files if found
-          echo "Applying YAML files..."
-
-          # Look in the test directory where the migration script runs
-          if find ./test/kfp-kubernetes-native-migration-tests -name "*.yaml" -path "*/migration_output_*" -type f 2>/dev/null; then
-            find ./test/kfp-kubernetes-native-migration-tests -name "*.yaml" -path "*/migration_output_*" -exec kubectl apply -f {} -n kubeflow \;
-          else
-            echo "No migration output YAML files found in test directory"
-          fi
-
-          # Also look in the tools directory where migration script might create files
-          if find ./tools/k8s-native -name "*.yaml" -type f 2>/dev/null; then
-            find ./tools/k8s-native -name "*.yaml" -exec kubectl apply -f {} -n kubeflow \;
-          else
-            echo "No YAML files found in tools directory"
-          fi
-
-          # Look in the default migration output directory
-          if find ./kfp-exported-pipelines -name "*.yaml" -type f 2>/dev/null; then
-            find ./kfp-exported-pipelines -name "*.yaml" -exec kubectl apply -f {} -n kubeflow \;
-          else
-            echo "No YAML files found in default migration directory"
-          fi
-
-          # Wait for pipelines to be created
-          sleep 10
-
-          # Verify pipelines were created
-          echo "Current pipelines in cluster:"
-          kubectl get pipeline -n kubeflow
-          echo "Current pipeline versions in cluster:"
-          kubectl get pipelineversion -n kubeflow
-
-          echo "Migrated YAML files applied successfully to K8s cluster"
-        continue-on-error: true
-
       - name: Run K8s mode migration tests
-        if: ${{ steps.apply-migrated-yaml.outcome == 'success' }}
+        if: ${{ steps.switch-to-k8s-mode.outcome == 'success' }}
         id: run-k8s-mode-tests
         env:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v
+        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v -s
         continue-on-error: true
 
       - name: Collect failed logs
-        if: ${{ steps.create-kfp-cluster.outcome != 'success' || steps.forward-api-port.outcome != 'success' || steps.run-db-mode-tests.outcome != 'success' || steps.run-k8s-mode-tests.outcome != 'success' }}
+        if: ${{ steps.create-kfp-cluster.outcome != 'success' || steps.forward-api-port.outcome != 'success' || steps.run-db-mode-tests.outcome != 'success' || steps.switch-to-k8s-mode.outcome != 'success' || steps.run-k8s-mode-tests.outcome != 'success' }}
         run: |
           ./.github/resources/scripts/collect-logs.sh --ns kubeflow --output /tmp/tmp_pod_log.txt
           exit 1

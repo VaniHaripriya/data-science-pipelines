@@ -116,13 +116,19 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create run using KFP client
-        run = client.create_run_from_pipeline_func(
-            pipeline_func=None,  # We'll use pipeline_id instead
-            experiment_id=experiment_id,
-            run_name=name,
-            arguments=parameters
-        )
+        # Create run using the runs API directly (like in versioned pipeline examples)
+        run_body = {
+            "name": name,
+            "pipeline_spec": {
+                "parameters": parameters or []
+            },
+            "resource_references": [
+                {"key": {"id": pipeline_version_id, "type": 4}, "relationship": 2},  # Pipeline version
+                {"key": {"id": experiment_id, "type": 1}, "relationship": 1}  # Experiment
+            ]
+        }
+        
+        run = client.runs.create_run(run_body)
         
         return {
             "id": run.run_id,
@@ -158,7 +164,7 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
             pipeline_id=pipeline_id,
             version_id=pipeline_version_id,
             cron_expression=cron_expression,
-            parameters=parameters
+            params=parameters  # Use 'params' not 'arguments'
         )
         
         return {
