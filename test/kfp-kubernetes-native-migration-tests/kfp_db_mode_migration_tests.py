@@ -86,7 +86,7 @@ class TestMigrationIntegration(unittest.TestCase):
     def test_migration_single_pipeline_multiple_versions_same_spec(self):
         """Test that the migration script correctly exports a single pipeline with multiple versions that have the same specification"""
         
-       with patch('sys.argv', [
+        with patch('sys.argv', [
             'migration.py',
             '--kfp-server-host', KFP_ENDPOINT,
             '--output', str(self.output_dir),
