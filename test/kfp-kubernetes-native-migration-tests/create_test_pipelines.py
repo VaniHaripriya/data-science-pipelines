@@ -126,7 +126,7 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
         
         return {
             "id": run.run_id,
-            "name": run.display_name,
+            "name": run.display_name or name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
@@ -158,12 +158,12 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
             pipeline_id=pipeline_id,
             version_id=pipeline_version_id,
             cron_expression=cron_expression,
-            arguments=parameters
+            parameters=parameters
         )
         
         return {
             "id": recurring_run.recurring_run_id,
-            "name": recurring_run.display_name,
+            "name": recurring_run.display_name or name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id

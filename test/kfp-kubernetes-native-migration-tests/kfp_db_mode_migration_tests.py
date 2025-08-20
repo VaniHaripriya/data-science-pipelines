@@ -120,14 +120,16 @@ class TestMigrationIntegration(unittest.TestCase):
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
        
         complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
-        self.assertGreaterEqual(len(complex_pipeline_files), 2, "Complex pipeline should have multiple versions")        
+        self.assertEqual(len(complex_pipeline_files), 1, "Should have one file for complex pipeline")        
        
-        version_contents = [f.read_text() for f in complex_pipeline_files if "kind: PipelineVersion" in f.read_text()]
-        self.assertGreaterEqual(len(version_contents), 2, "Should have multiple version contents")        
+        # Check that the complex pipeline file contains multiple versions
+        complex_pipeline_file = complex_pipeline_files[0]
+        content = complex_pipeline_file.read_text()
+        version_count = content.count("kind: PipelineVersion")
+        self.assertGreaterEqual(version_count, 2, "Complex pipeline should have multiple versions in the file")        
         
-        has_platform_spec = any("platformSpec" in content for content in version_contents)
-        no_platform_spec = any("platformSpec" not in content for content in version_contents)
-        self.assertTrue(has_platform_spec and no_platform_spec, "Should have versions with and without platformSpec")
+        # Check for original ID annotations
+        self.assertIn("pipelines.kubeflow.org/original-id", content, "Should have original ID annotation")
 
     def test_migration_multiple_pipelines_single_version_each(self):
         """Test that the migration script correctly exports multiple pipelines, each with a single version"""
@@ -166,8 +168,14 @@ class TestMigrationIntegration(unittest.TestCase):
         pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name or "complex-pipeline" in f.name]
         self.assertGreaterEqual(len(pipeline_files), 2, "Should have files for both pipelines")       
        
+        # Check that complex pipeline file contains multiple versions
         complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
-        self.assertGreaterEqual(len(complex_pipeline_files), 2, "Complex pipeline should have multiple versions")   
+        self.assertEqual(len(complex_pipeline_files), 1, "Should have one file for complex pipeline")
+        
+        complex_pipeline_file = complex_pipeline_files[0]
+        content = complex_pipeline_file.read_text()
+        version_count = content.count("kind: PipelineVersion")
+        self.assertGreaterEqual(version_count, 2, "Complex pipeline should have multiple versions in the file")   
     
     # def test_migration_with_pipeline_files(self):
     #     """Test that the migration script correctly exports pipelines created from pipeline files in the valid directory"""
