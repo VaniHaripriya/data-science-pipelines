@@ -20,6 +20,7 @@ import tempfile
 import unittest
 import subprocess
 import requests
+import kfp
 from pathlib import Path
 from unittest.mock import patch
 
@@ -159,114 +160,107 @@ class TestK8sModeMigration(unittest.TestCase):
         """Test that new experiments and runs can be created in K8s mode after migration"""
         
         try:
-            # Create a new experiment in K8s mode
-            experiment_data = {
-                "name": "k8s-mode-test-experiment",
-                "description": "Test experiment created in K8s mode"
-            }
+            # Create a new experiment in K8s mode using KFP client
+            client = kfp.Client(host=KFP_ENDPOINT)
             
-            response = requests.post(
-                f"{self.api_base}/experiments",
-                json=experiment_data,
+            experiment = client.create_experiment(
+                name="k8s-mode-test-experiment",
+                description="Test experiment created in K8s mode"
+            )
+            
+            print(f"✅ Created experiment in K8s mode: {experiment.display_name} (ID: {experiment.experiment_id})")
+            
+            # Verify experiment was created
+            self.assertIsNotNone(experiment.experiment_id, "Experiment should have an ID")
+            self.assertEqual(experiment.display_name, "k8s-mode-test-experiment", "Experiment name should match")
+            
+            # Now create a run in this experiment using the same pattern as create_test_pipelines.py
+            # First, get an existing pipeline to use for the run
+            pipeline_response = requests.get(
+                f"{self.api_base}/pipelines",
                 headers={"Content-Type": "application/json"}
             )
             
-            if response.status_code == 200:
-                experiment = response.json()
-                print(f"✅ Created experiment in K8s mode: {experiment['name']} (ID: {experiment['id']})")
-                
-                # Verify experiment was created
-                self.assertIn("id", experiment, "Experiment should have an ID")
-                self.assertEqual(experiment["name"], "k8s-mode-test-experiment", "Experiment name should match")
-                
-                # Now create a run in this experiment
-                # First, get an existing pipeline to use for the run
-                pipeline_response = requests.get(
-                    f"{self.api_base}/pipelines",
-                    headers={"Content-Type": "application/json"}
-                )
-                
-                if pipeline_response.status_code == 200:
-                    pipelines = pipeline_response.json().get("pipelines", [])
-                    if pipelines:
-                        # Use the first available pipeline
-                        pipeline = pipelines[0]
-                        pipeline_id = pipeline["id"]
-                        
-                        # Get pipeline versions
-                        version_response = requests.get(
-                            f"{self.api_base}/pipelines/{pipeline_id}/versions",
-                            headers={"Content-Type": "application/json"}
-                        )
-                        
-                        if version_response.status_code == 200:
-                            versions = version_response.json().get("versions", [])
-                            if versions:
-                                version = versions[0]
-                                version_id = version["id"]
-                                
-                                # Create a run in the experiment
-                                run_data = {
-                                    "name": "k8s-mode-test-run",
-                                    "pipeline_spec": {
-                                        "pipeline_id": pipeline_id,
-                                        "pipeline_version_id": version_id
-                                    },
-                                    "resource_references": [
-                                        {
-                                            "key": {
-                                                "type": "EXPERIMENT",
-                                                "id": experiment["id"]
-                                            },
-                                            "relationship": "OWNER"
-                                        }
-                                    ]
-                                }
-                                
-                                run_response = requests.post(
-                                    f"{self.api_base}/runs",
-                                    json=run_data,
-                                    headers={"Content-Type": "application/json"}
-                                )
-                                
-                                if run_response.status_code == 200:
-                                    run = run_response.json()
-                                    print(f"✅ Created run in K8s mode: {run['name']} (ID: {run['id']})")
-                                    
-                                    # Verify run was created
-                                    self.assertIn("id", run, "Run should have an ID")
-                                    self.assertEqual(run["name"], "k8s-mode-test-run", "Run name should match")
-                                    
-                                    # Verify run is associated with the experiment
-                                    resource_refs = run.get("resource_references", [])
-                                    experiment_ref = next((ref for ref in resource_refs if ref["key"]["type"] == "EXPERIMENT"), None)
-                                    self.assertIsNotNone(experiment_ref, "Run should be associated with an experiment")
-                                    self.assertEqual(experiment_ref["key"]["id"], experiment["id"], "Run should be associated with the created experiment")
-                                    
-                                    # Verify run uses the correct pipeline and version
-                                    pipeline_spec = run.get("pipeline_spec", {})
-                                    self.assertEqual(pipeline_spec.get("pipeline_id"), pipeline_id, "Run should use the correct pipeline")
-                                    self.assertEqual(pipeline_spec.get("pipeline_version_id"), version_id, "Run should use the correct pipeline version")
-                                    
-                                    print(f"✅ Run successfully associated with experiment: {experiment['name']}")
-                                    print(f"✅ Run uses pipeline: {pipeline['name']} (v{version['name']})")
-                                    
-                                else:
-                                    print(f"Failed to create run in K8s mode: {run_response.status_code} - {run_response.text}")
-                            else:
-                                print("⚠️ No pipeline versions available for run creation")
+            if pipeline_response.status_code == 200:
+                pipelines = pipeline_response.json().get("pipelines", [])
+                if pipelines:
+                    # Use the first available pipeline
+                    pipeline = pipelines[0]
+                    pipeline_id = pipeline["id"]
+                    
+                    # Get pipeline versions
+                    version_response = requests.get(
+                        f"{self.api_base}/pipelines/{pipeline_id}/versions",
+                        headers={"Content-Type": "application/json"}
+                    )
+                    
+                    if version_response.status_code == 200:
+                        versions = version_response.json().get("versions", [])
+                        if versions:
+                            version = versions[0]
+                            version_id = version["id"]
+                            
+                            # Create a run in the experiment using the same pattern as create_test_pipelines.py
+                            import kfp_server_api
+                            
+                            # Create the run body using the proper API model
+                            run_body = kfp_server_api.V1Run(
+                                name="k8s-mode-test-run",
+                                pipeline_spec=kfp_server_api.V1PipelineSpec(
+                                    parameters=[]
+                                ),
+                                resource_references=[
+                                    kfp_server_api.V1ResourceReference(
+                                        key=kfp_server_api.V1ResourceKey(
+                                            id=version_id,
+                                            type=kfp_server_api.V1ResourceType.PIPELINE_VERSION
+                                        ),
+                                        relationship=kfp_server_api.V1Relationship.OWNER
+                                    ),
+                                    kfp_server_api.V1ResourceReference(
+                                        key=kfp_server_api.V1ResourceKey(
+                                            id=experiment.experiment_id,
+                                            type=kfp_server_api.V1ResourceType.EXPERIMENT
+                                        ),
+                                        relationship=kfp_server_api.V1Relationship.OWNER
+                                    )
+                                ]
+                            )
+                            
+                            # Use the client's internal run API
+                            run_data = client._run_api.run_service_create_run(run=run_body)
+                            
+                            print(f"✅ Created run in K8s mode: {run_data.name} (ID: {run_data.run_id})")
+                            
+                            # Verify run was created
+                            self.assertIsNotNone(run_data.run_id, "Run should have an ID")
+                            self.assertEqual(run_data.name, "k8s-mode-test-run", "Run name should match")
+                            
+                            # Verify run is associated with the experiment
+                            resource_refs = run_data.resource_references
+                            experiment_ref = next((ref for ref in resource_refs if ref.key.type == kfp_server_api.V1ResourceType.EXPERIMENT), None)
+                            self.assertIsNotNone(experiment_ref, "Run should be associated with an experiment")
+                            self.assertEqual(experiment_ref.key.id, experiment.experiment_id, "Run should be associated with the created experiment")
+                            
+                            # Verify run uses the correct pipeline and version
+                            pipeline_spec = run_data.pipeline_spec
+                            self.assertIsNotNone(pipeline_spec, "Run should have a pipeline spec")
+                            
+                            print(f"✅ Run successfully associated with experiment: {experiment.display_name}")
+                            print(f"✅ Run uses pipeline: {pipeline['name']} (v{version['name']})")
+                            
                         else:
-                            print(f"Failed to get pipeline versions: {version_response.status_code} - {version_response.text}")
+                            print("⚠️ No pipeline versions available for run creation")
                     else:
-                        print("⚠️ No pipelines available for run creation")
+                        print(f"Failed to get pipeline versions: {version_response.status_code} - {version_response.text}")
                 else:
-                    print(f"Failed to get pipelines: {pipeline_response.status_code} - {pipeline_response.text}")
-                
+                    print("⚠️ No pipelines available for run creation")
             else:
-                print(f"Failed to create experiment in K8s mode: {response.status_code} - {response.text}")
+                print(f"Failed to get pipelines: {pipeline_response.status_code} - {pipeline_response.text}")
                 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             print(f"Error creating experiment and run in K8s mode: {e}")
+            raise
 
     def test_k8s_mode_pipeline_validation(self):
         """Test that migrated pipelines maintain their specifications and are ready for execution in K8s mode"""

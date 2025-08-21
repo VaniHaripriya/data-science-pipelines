@@ -19,73 +19,92 @@ import sys
 import os
 from pathlib import Path
 import kfp
+import kfp.dsl as dsl
 
 # Environment variables
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 KFP_UI_ENDPOINT = os.environ.get('KFP_UI_ENDPOINT', 'http://localhost:8080')
 KFP_NAMESPACE = os.environ.get('KFP_NAMESPACE', 'kubeflow')
 
-def create_pipeline(name, description, pipeline_spec):
+# Define pipeline functions using KFP DSL
+@dsl.component
+def print_hello(message: str):
+    """Simple component that prints a message."""
+    print(f"Hello: {message}")
+
+@dsl.component
+def data_preprocessing(input_data: str):
+    """Component for data preprocessing."""
+    print(f"Processing data: {input_data}")
+
+@dsl.component
+def model_training(input_data: str):
+    """Component for model training."""
+    print(f"Training model with input: {input_data}")
+
+@dsl.component
+def model_evaluation(input_data: str):
+    """Component for model evaluation."""
+    print(f"Evaluating model with input: {input_data}")
+
+@dsl.pipeline(name="simple-pipeline")
+def simple_pipeline(message: str = "Hello World"):
+    """A simple test pipeline."""
+    print_hello(message=message)
+
+@dsl.pipeline(name="complex-pipeline")
+def complex_pipeline(input_data: str = "test_data"):
+    """A complex test pipeline with multiple components."""
+    preprocessing_task = data_preprocessing(input_data=input_data)
+    training_task = model_training(input_data=input_data)
+    training_task.after(preprocessing_task)
+
+@dsl.pipeline(name="complex-pipeline-v2")
+def complex_pipeline_v2(input_data: str = "test_data"):
+    """A complex test pipeline with multiple components including evaluation."""
+    preprocessing_task = data_preprocessing(input_data=input_data)
+    training_task = model_training(input_data=input_data)
+    evaluation_task = model_evaluation(input_data=input_data)
+    training_task.after(preprocessing_task)
+    evaluation_task.after(training_task)
+
+def create_pipeline(name, description, pipeline_func):
     """Create a pipeline in KFP Database mode."""
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create a temporary pipeline YAML file
-        import tempfile
-        import yaml
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(pipeline_spec, f)
-            pipeline_file = f.name
-        
-        # Upload pipeline using KFP client
-        pipeline = client.upload_pipeline(
-            pipeline_package_path=pipeline_file,
+        # Upload pipeline using KFP client from pipeline function
+        pipeline = client.upload_pipeline_from_pipeline_func(
+            pipeline_func=pipeline_func,
             pipeline_name=name,
             description=description
         )
         
-        # Clean up temporary file
-        os.unlink(pipeline_file)
-        
         return {
             "id": pipeline.pipeline_id,
             "name": pipeline.display_name,
-            "description": description,
-            "pipeline_spec": pipeline_spec
+            "description": description
         }
     except Exception as e:
         print(f"Failed to create pipeline {name}: {e}")
         return None
 
-def create_pipeline_version(pipeline_id, name, pipeline_spec):
+def create_pipeline_version(pipeline_id, name, pipeline_func):
     """Create a pipeline version in KFP Database mode."""
     try:
         client = kfp.Client(host=KFP_ENDPOINT)
         
-        # Create a temporary pipeline YAML file
-        import tempfile
-        import yaml
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(pipeline_spec, f)
-            pipeline_file = f.name
-        
-        # Upload pipeline version using KFP client
-        version = client.upload_pipeline_version(
-            pipeline_package_path=pipeline_file,
+        # Upload pipeline version using KFP client from pipeline function
+        version = client.upload_pipeline_version_from_pipeline_func(
+            pipeline_func=pipeline_func,
             pipeline_version_name=name,
             pipeline_id=pipeline_id
         )
         
-        # Clean up temporary file
-        os.unlink(pipeline_file)
-        
         return {
             "id": version.pipeline_version_id,
             "name": version.display_name,
-            "pipeline_id": pipeline_id,
-            "pipeline_spec": pipeline_spec
+            "pipeline_id": pipeline_id
         }
     except Exception as e:
         print(f"Failed to create pipeline version {name}: {e}")
@@ -243,303 +262,30 @@ def main():
     }
     
     # Create simple pipeline
-    simple_pipeline_spec = {
-        "schemaVersion": "2.1.0",
-        "sdkVersion": "kfp-2.0.0",
-        "pipelineInfo": {
-            "name": "simple-pipeline"
-        },
-        "components": {
-            "comp-print-hello": {
-                "executorLabel": "exec-print-hello",
-                "inputDefinitions": {
-                    "parameters": {
-                        "message": {
-                            "parameterType": "STRING"
-                        }
-                    }
-                }
-            }
-        },
-        "deploymentSpec": {
-            "executors": {
-                "exec-print-hello": {
-                    "container": {
-                        "image": "python:3.9",
-                        "command": ["echo"],
-                        "args": ["{{$.inputs.parameters['message']}}"]
-                    }
-                }
-            }
-        },
-        "root": {
-            "dag": {
-                "tasks": {
-                    "print-hello": {
-                        "componentRef": {
-                            "name": "comp-print-hello"
-                        },
-                        "inputs": {
-                            "parameters": {
-                                "message": {
-                                    "componentInputParameter": "message"
-                                }
-                            }
-                        },
-                        "taskInfo": {
-                            "name": "print-hello"
-                        }
-                    }
-                }
-            },
-            "inputDefinitions": {
-                "parameters": {
-                    "message": {
-                        "parameterType": "STRING"
-                    }
-                }
-            }
-        }
-    }
-    
-    pipeline1 = create_pipeline("simple-pipeline", "A simple test pipeline", simple_pipeline_spec)
+    pipeline1 = create_pipeline("simple-pipeline", "A simple test pipeline", simple_pipeline)
     if pipeline1:
         test_data["pipelines"].append(pipeline1)
         print(f"Created pipeline: {pipeline1['name']} (ID: {pipeline1['id']})")
         
         # Create pipeline version
-        version1 = create_pipeline_version(pipeline1["id"], "v1", simple_pipeline_spec)
+        version1 = create_pipeline_version(pipeline1["id"], "v1", simple_pipeline)
         if version1:
             test_data["pipelines"].append(version1)
             print(f"Created pipeline version: {version1['name']} (ID: {version1['id']})")
     
     # Create pipeline with multiple versions and different specs
-    complex_pipeline_spec_v1 = {
-        "schemaVersion": "2.1.0",
-        "sdkVersion": "kfp-2.0.0",
-        "pipelineInfo": {
-            "name": "complex-pipeline"
-        },
-        "components": {
-            "comp-data-preprocessing": {
-                "executorLabel": "exec-data-preprocessing",
-                "inputDefinitions": {
-                    "parameters": {
-                        "input_data": {
-                            "parameterType": "STRING"
-                        }
-                    }
-                }
-            },
-            "comp-model-training": {
-                "executorLabel": "exec-model-training",
-                "inputDefinitions": {
-                    "parameters": {
-                        "input_data": {
-                            "parameterType": "STRING"
-                        }
-                    }
-                }
-            }
-        },
-        "deploymentSpec": {
-            "executors": {
-                "exec-data-preprocessing": {
-                    "container": {
-                        "image": "python:3.9",
-                        "command": ["echo"],
-                        "args": ["Processing data: {{$.inputs.parameters['input_data']}}"]
-                    }
-                },
-                "exec-model-training": {
-                    "container": {
-                        "image": "python:3.9",
-                        "command": ["echo"],
-                        "args": ["Training model with input: {{$.inputs.parameters['input_data']}}"]
-                    }
-                }
-            }
-        },
-        "root": {
-            "dag": {
-                "tasks": {
-                    "data-preprocessing": {
-                        "componentRef": {
-                            "name": "comp-data-preprocessing"
-                        },
-                        "inputs": {
-                            "parameters": {
-                                "input_data": {
-                                    "componentInputParameter": "input_data"
-                                }
-                            }
-                        },
-                        "taskInfo": {
-                            "name": "data-preprocessing"
-                        }
-                    },
-                    "model-training": {
-                        "componentRef": {
-                            "name": "comp-model-training"
-                        },
-                        "inputs": {
-                            "parameters": {
-                                "input_data": {
-                                    "componentInputParameter": "input_data"
-                                }
-                            }
-                        },
-                        "taskInfo": {
-                            "name": "model-training"
-                        }
-                    }
-                }
-            },
-            "inputDefinitions": {
-                "parameters": {
-                    "input_data": {
-                        "parameterType": "STRING"
-                    }
-                }
-            }
-        }
-    }
-    
-    complex_pipeline_spec_v2 = {
-        "schemaVersion": "2.1.0",
-        "sdkVersion": "kfp-2.0.0",
-        "pipelineInfo": {
-            "name": "complex-pipeline"
-        },
-        "components": {
-            "comp-data-preprocessing": {
-                "executorLabel": "exec-data-preprocessing",
-                "inputDefinitions": {
-                    "parameters": {
-                        "input_data": {
-                            "parameterType": "STRING"
-                        }
-                    }
-                }
-            },
-            "comp-model-training": {
-                "executorLabel": "exec-model-training",
-                "inputDefinitions": {
-                    "parameters": {
-                        "input_data": {
-                            "parameterType": "STRING"
-                        }
-                    }
-                }
-            },
-            "comp-model-evaluation": {
-                "executorLabel": "exec-model-evaluation",
-                "inputDefinitions": {
-                    "parameters": {
-                        "input_data": {
-                            "parameterType": "STRING"
-                        }
-                    }
-                }
-            }
-        },
-        "deploymentSpec": {
-            "executors": {
-                "exec-data-preprocessing": {
-                    "container": {
-                        "image": "python:3.9",
-                        "command": ["echo"],
-                        "args": ["Processing data: {{$.inputs.parameters['input_data']}}"]
-                    }
-                },
-                "exec-model-training": {
-                    "container": {
-                        "image": "python:3.9",
-                        "command": ["echo"],
-                        "args": ["Training model with input: {{$.inputs.parameters['input_data']}}"]
-                    }
-                },
-                "exec-model-evaluation": {
-                    "container": {
-                        "image": "python:3.9",
-                        "command": ["echo"],
-                        "args": ["Evaluating model with input: {{$.inputs.parameters['input_data']}}"]
-                    }
-                }
-            }
-        },
-        "root": {
-            "dag": {
-                "tasks": {
-                    "data-preprocessing": {
-                        "componentRef": {
-                            "name": "comp-data-preprocessing"
-                        },
-                        "inputs": {
-                            "parameters": {
-                                "input_data": {
-                                    "componentInputParameter": "input_data"
-                                }
-                            }
-                        },
-                        "taskInfo": {
-                            "name": "data-preprocessing"
-                        }
-                    },
-                    "model-training": {
-                        "componentRef": {
-                            "name": "comp-model-training"
-                        },
-                        "inputs": {
-                            "parameters": {
-                                "input_data": {
-                                    "componentInputParameter": "input_data"
-                                }
-                            }
-                        },
-                        "taskInfo": {
-                            "name": "model-training"
-                        }
-                    },
-                    "model-evaluation": {
-                        "componentRef": {
-                            "name": "comp-model-evaluation"
-                        },
-                        "inputs": {
-                            "parameters": {
-                                "input_data": {
-                                    "componentInputParameter": "input_data"
-                                }
-                            }
-                        },
-                        "taskInfo": {
-                            "name": "model-evaluation"
-                        }
-                    }
-                }
-            },
-            "inputDefinitions": {
-                "parameters": {
-                    "input_data": {
-                        "parameterType": "STRING"
-                    }
-                }
-            }
-        }
-    }
-    
-    pipeline2 = create_pipeline("complex-pipeline", "A complex test pipeline", complex_pipeline_spec_v1)
+    pipeline2 = create_pipeline("complex-pipeline", "A complex test pipeline", complex_pipeline)
     if pipeline2:
         test_data["pipelines"].append(pipeline2)
         print(f"Created pipeline: {pipeline2['name']} (ID: {pipeline2['id']})")
         
         # Create two versions with different specs
-        version2_1 = create_pipeline_version(pipeline2["id"], "v1", complex_pipeline_spec_v1)
+        version2_1 = create_pipeline_version(pipeline2["id"], "v1", complex_pipeline)
         if version2_1:
             test_data["pipelines"].append(version2_1)
             print(f"Created pipeline version: {version2_1['name']} (ID: {version2_1['id']})")
         
-        version2_2 = create_pipeline_version(pipeline2["id"], "v2", complex_pipeline_spec_v2)
+        version2_2 = create_pipeline_version(pipeline2["id"], "v2", complex_pipeline_v2)
         if version2_2:
             test_data["pipelines"].append(version2_2)
             print(f"Created pipeline version: {version2_2['name']} (ID: {version2_2['id']})")
