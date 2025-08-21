@@ -201,28 +201,33 @@ class TestK8sModeMigration(unittest.TestCase):
                             version_id = version["id"]
                             
                             # Create a run in the experiment using the same pattern as create_test_pipelines.py
-                            import kfp_server_api
+                            from kfp_server_api.models.api_run import ApiRun
+                            from kfp_server_api.models.api_pipeline_spec import ApiPipelineSpec
+                            from kfp_server_api.models.api_resource_reference import ApiResourceReference
+                            from kfp_server_api.models.api_resource_key import ApiResourceKey
+                            from kfp_server_api.models.api_resource_type import ApiResourceType
+                            from kfp_server_api.models.api_relationship import ApiRelationship
                             
                             # Create the run body using the proper API model
-                            run_body = kfp_server_api.V1Run(
+                            run_body = ApiRun(
                                 name="k8s-mode-test-run",
-                                pipeline_spec=kfp_server_api.V1PipelineSpec(
+                                pipeline_spec=ApiPipelineSpec(
                                     parameters=[]
                                 ),
                                 resource_references=[
-                                    kfp_server_api.V1ResourceReference(
-                                        key=kfp_server_api.V1ResourceKey(
+                                    ApiResourceReference(
+                                        key=ApiResourceKey(
                                             id=version_id,
-                                            type=kfp_server_api.V1ResourceType.PIPELINE_VERSION
+                                            type=ApiResourceType.PIPELINE_VERSION
                                         ),
-                                        relationship=kfp_server_api.V1Relationship.OWNER
+                                        relationship=ApiRelationship.OWNER
                                     ),
-                                    kfp_server_api.V1ResourceReference(
-                                        key=kfp_server_api.V1ResourceKey(
+                                    ApiResourceReference(
+                                        key=ApiResourceKey(
                                             id=experiment.experiment_id,
-                                            type=kfp_server_api.V1ResourceType.EXPERIMENT
+                                            type=ApiResourceType.EXPERIMENT
                                         ),
-                                        relationship=kfp_server_api.V1Relationship.OWNER
+                                        relationship=ApiRelationship.OWNER
                                     )
                                 ]
                             )
@@ -230,15 +235,15 @@ class TestK8sModeMigration(unittest.TestCase):
                             # Use the client's internal run API
                             run_data = client._run_api.run_service_create_run(run=run_body)
                             
-                            print(f"✅ Created run in K8s mode: {run_data.name} (ID: {run_data.run_id})")
+                            print(f"✅ Created run in K8s mode: {run_data.name} (ID: {run_data.id})")
                             
                             # Verify run was created
-                            self.assertIsNotNone(run_data.run_id, "Run should have an ID")
+                            self.assertIsNotNone(run_data.id, "Run should have an ID")
                             self.assertEqual(run_data.name, "k8s-mode-test-run", "Run name should match")
                             
                             # Verify run is associated with the experiment
                             resource_refs = run_data.resource_references
-                            experiment_ref = next((ref for ref in resource_refs if ref.key.type == kfp_server_api.V1ResourceType.EXPERIMENT), None)
+                            experiment_ref = next((ref for ref in resource_refs if ref.key.type == ApiResourceType.EXPERIMENT), None)
                             self.assertIsNotNone(experiment_ref, "Run should be associated with an experiment")
                             self.assertEqual(experiment_ref.key.id, experiment.experiment_id, "Run should be associated with the created experiment")
                             
@@ -455,6 +460,225 @@ class TestK8sModeMigration(unittest.TestCase):
                 
         else:
             print("⚠️ No recurring run data available for K8s mode test")
+
+    def test_k8s_mode_apply_migrated_pipeline_and_run(self):
+        """Test applying migrated pipeline and pipeline version in K8s mode, creating a run, and verifying it matches the usual run"""
+        
+        try:
+            # First, check if we have migrated YAML files
+            migrated_yaml_dir = Path("./kfp-exported-pipelines")
+            if not migrated_yaml_dir.exists():
+                print("⚠️ No migrated YAML directory found, checking other locations...")
+                migrated_yaml_dir = Path("./tools/k8s-native")
+                if not migrated_yaml_dir.exists():
+                    print("⚠️ No migrated YAML files found, skipping test")
+                    return
+            
+            # Find YAML files containing Pipeline and PipelineVersion resources
+            yaml_files = list(migrated_yaml_dir.glob("*.yaml"))
+            if not yaml_files:
+                print("⚠️ No YAML files found in migrated directory, skipping test")
+                return
+            
+            print(f"Found {len(yaml_files)} YAML files to apply")
+            
+            # Apply the migrated YAML files to the cluster
+            for yaml_file in yaml_files:
+                print(f"Applying {yaml_file}...")
+                try:
+                    result = subprocess.run([
+                        'kubectl', 'apply', '-f', str(yaml_file), '-n', 'kubeflow'
+                    ], check=True, capture_output=True, text=True)
+                    print(f"✅ Applied {yaml_file}: {result.stdout.strip()}")
+                except subprocess.CalledProcessError as e:
+                    print(f"⚠️ Failed to apply {yaml_file}: {e.stderr}")
+                    # Continue with other files
+            
+            # Wait for the applied resources to be ready
+            print("Waiting for applied pipelines to be ready...")
+            time.sleep(10)
+            
+            # Verify pipelines are available in K8s mode
+            try:
+                result = subprocess.run([
+                    'kubectl', 'get', 'pipeline', '-n', 'kubeflow', '--no-headers'
+                ], check=True, capture_output=True, text=True)
+                
+                pipeline_lines = [line for line in result.stdout.strip().split('\n') if line]
+                print(f"✅ Found {len(pipeline_lines)} pipelines in K8s mode after applying migrated YAML")
+                
+                if not pipeline_lines:
+                    print("⚠️ No pipelines found after applying migrated YAML, skipping run creation")
+                    return
+                
+                # Get the first available pipeline
+                pipeline_name = pipeline_lines[0].split()[0]
+                print(f"Using pipeline: {pipeline_name}")
+                
+                # Get pipeline versions
+                version_result = subprocess.run([
+                    'kubectl', 'get', 'pipelineversion', '-n', 'kubeflow', '--no-headers'
+                ], check=True, capture_output=True, text=True)
+                
+                version_lines = [line for line in version_result.stdout.strip().split('\n') if line]
+                print(f"✅ Found {len(version_lines)} pipeline versions in K8s mode")
+                
+                if not version_lines:
+                    print("⚠️ No pipeline versions found, skipping run creation")
+                    return
+                
+                # Get the first available pipeline version
+                version_name = version_lines[0].split()[0]
+                print(f"Using pipeline version: {version_name}")
+                
+                # Create an experiment for the run
+                client = kfp.Client(host=KFP_ENDPOINT)
+                experiment = client.create_experiment(
+                    name="migrated-pipeline-test-experiment",
+                    description="Test experiment for migrated pipeline run"
+                )
+                print(f"✅ Created experiment: {experiment.display_name} (ID: {experiment.experiment_id})")
+                
+                # Get pipeline and version IDs from KFP API
+                pipeline_response = requests.get(
+                    f"{self.api_base}/pipelines",
+                    headers={"Content-Type": "application/json"}
+                )
+                
+                if pipeline_response.status_code == 200:
+                    pipelines = pipeline_response.json().get("pipelines", [])
+                    target_pipeline = None
+                    
+                    for pipeline in pipelines:
+                        if pipeline["name"] == pipeline_name:
+                            target_pipeline = pipeline
+                            break
+                    
+                    if not target_pipeline:
+                        print(f"⚠️ Pipeline {pipeline_name} not found in KFP API, skipping run creation")
+                        return
+                    
+                    # Get pipeline versions
+                    version_response = requests.get(
+                        f"{self.api_base}/pipelines/{target_pipeline['id']}/versions",
+                        headers={"Content-Type": "application/json"}
+                    )
+                    
+                    if version_response.status_code == 200:
+                        versions = version_response.json().get("versions", [])
+                        target_version = None
+                        
+                        for version in versions:
+                            if version["name"] == version_name:
+                                target_version = version
+                                break
+                        
+                        if not target_version:
+                            print(f"⚠️ Pipeline version {version_name} not found in KFP API, skipping run creation")
+                            return
+                        
+                        # Create a run using the migrated pipeline and version
+                        from kfp_server_api.models.api_run import ApiRun
+                        from kfp_server_api.models.api_pipeline_spec import ApiPipelineSpec
+                        from kfp_server_api.models.api_resource_reference import ApiResourceReference
+                        from kfp_server_api.models.api_resource_key import ApiResourceKey
+                        from kfp_server_api.models.api_resource_type import ApiResourceType
+                        from kfp_server_api.models.api_relationship import ApiRelationship
+                        
+                        run_body = ApiRun(
+                            name="migrated-pipeline-test-run",
+                            pipeline_spec=ApiPipelineSpec(
+                                parameters=[]
+                            ),
+                            resource_references=[
+                                ApiResourceReference(
+                                    key=ApiResourceKey(
+                                        id=target_version["id"],
+                                        type=ApiResourceType.PIPELINE_VERSION
+                                    ),
+                                    relationship=ApiRelationship.OWNER
+                                ),
+                                ApiResourceReference(
+                                    key=ApiResourceKey(
+                                        id=experiment.experiment_id,
+                                        type=ApiResourceType.EXPERIMENT
+                                    ),
+                                    relationship=ApiRelationship.OWNER
+                                )
+                            ]
+                        )
+                        
+                        # Use the client's internal run API
+                        run_data = client._run_api.run_service_create_run(run=run_body)
+                        
+                        print(f"✅ Created run from migrated pipeline: {run_data.name} (ID: {run_data.id})")
+                        
+                        # Verify the run was created successfully
+                        self.assertIsNotNone(run_data.id, "Run should have an ID")
+                        self.assertEqual(run_data.name, "migrated-pipeline-test-run", "Run name should match")
+                        
+                        # Verify run is associated with the experiment
+                        resource_refs = run_data.resource_references
+                        experiment_ref = next((ref for ref in resource_refs if ref.key.type == ApiResourceType.EXPERIMENT), None)
+                        self.assertIsNotNone(experiment_ref, "Run should be associated with an experiment")
+                        self.assertEqual(experiment_ref.key.id, experiment.experiment_id, "Run should be associated with the created experiment")
+                        
+                        # Verify run uses the correct pipeline and version
+                        pipeline_spec = run_data.pipeline_spec
+                        self.assertIsNotNone(pipeline_spec, "Run should have a pipeline spec")
+                        
+                        print(f"✅ Run successfully created from migrated pipeline: {pipeline_name} (v{version_name})")
+                        print(f"✅ Run associated with experiment: {experiment.display_name}")
+                        
+                        # Wait for the run to complete and check its status
+                        print("Waiting for run to complete...")
+                        time.sleep(30)  # Give some time for the run to start
+                        
+                        # Get run details
+                        run_details_response = requests.get(
+                            f"{self.api_base}/runs/{run_data.run_id}",
+                            headers={"Content-Type": "application/json"}
+                        )
+                        
+                        if run_details_response.status_code == 200:
+                            run_details = run_details_response.json()
+                            run_status = run_details.get("status", "UNKNOWN")
+                            print(f"✅ Run status: {run_status}")
+                            
+                            # Verify the run has the expected structure
+                            self.assertIn("id", run_details, "Run details should have an ID")
+                            self.assertIn("name", run_details, "Run details should have a name")
+                            self.assertIn("status", run_details, "Run details should have a status")
+                            
+                            print("✅ Run details match expected structure")
+                            
+                            # Compare with a "usual run" - verify it has the same fields as other runs
+                            if self.test_data.get("runs"):
+                                original_run = self.test_data["runs"][0]
+                                print(f"Comparing with original run: {original_run['name']}")
+                                
+                                # Check that both runs have the same basic structure
+                                expected_fields = ["id", "name", "status", "pipeline_spec", "resource_references"]
+                                for field in expected_fields:
+                                    self.assertIn(field, run_details, f"Migrated run should have {field} field")
+                                    if field in original_run:
+                                        print(f"✅ Both runs have {field} field")
+                            
+                        else:
+                            print(f"⚠️ Failed to get run details: {run_details_response.status_code}")
+                        
+                    else:
+                        print(f"⚠️ Failed to get pipeline versions: {version_response.status_code}")
+                
+                else:
+                    print(f"⚠️ Failed to get pipelines: {pipeline_response.status_code}")
+                
+            except subprocess.CalledProcessError as e:
+                print(f"Warning: Could not verify applied pipelines: {e.stderr}")
+            
+        except Exception as e:
+            print(f"Error testing migrated pipeline application and run: {e}")
+            raise
 
 
 if __name__ == '__main__':

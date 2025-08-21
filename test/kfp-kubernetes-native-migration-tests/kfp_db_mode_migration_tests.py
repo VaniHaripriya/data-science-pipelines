@@ -58,6 +58,9 @@ class TestMigrationIntegration(unittest.TestCase):
     def test_migration_single_pipeline_single_version(self): 
         """Test that the migration script correctly exports a single pipeline with single version from DB mode to Kubernetes native format"""
         
+        print(f"🔄 Starting migration test: {self._testMethodName}")
+        print(f"📁 Output directory: {self.output_dir}")
+        
         with patch('sys.argv', [
             'migration.py',
             '--kfp-server-host', KFP_ENDPOINT,
@@ -67,6 +70,11 @@ class TestMigrationIntegration(unittest.TestCase):
             migrate()        
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
+        print(f"✅ Migration completed. Found {len(yaml_files)} YAML files in: {self.output_dir}")
+        
+        for yaml_file in yaml_files:
+            print(f"📄 Generated file: {yaml_file}")
+        
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
         
         pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name]
@@ -80,6 +88,9 @@ class TestMigrationIntegration(unittest.TestCase):
     def test_migration_single_pipeline_multiple_versions_same_spec(self):
         """Test that the migration script correctly exports a single pipeline with multiple versions that have the same specification"""
         
+        print(f"🔄 Starting migration test: {self._testMethodName}")
+        print(f"📁 Output directory: {self.output_dir}")
+        
         with patch('sys.argv', [
             'migration.py',
             '--kfp-server-host', KFP_ENDPOINT,
@@ -89,6 +100,11 @@ class TestMigrationIntegration(unittest.TestCase):
             migrate()
                 
         yaml_files = list(self.output_dir.glob("*.yaml"))
+        print(f"✅ Migration completed. Found {len(yaml_files)} YAML files in: {self.output_dir}")
+        
+        for yaml_file in yaml_files:
+            print(f"📄 Generated file: {yaml_file}")
+        
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
         
         version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])
@@ -102,6 +118,9 @@ class TestMigrationIntegration(unittest.TestCase):
     def test_migration_single_pipeline_multiple_versions_different_specs(self):
         """Test that the migration script correctly exports a single pipeline with multiple versions that have different specifications"""
         
+        print(f"🔄 Starting migration test: {self._testMethodName}")
+        print(f"📁 Output directory: {self.output_dir}")
+        
         with patch('sys.argv', [
             'migration.py',
             '--kfp-server-host', KFP_ENDPOINT,
@@ -111,6 +130,11 @@ class TestMigrationIntegration(unittest.TestCase):
             migrate()        
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
+        print(f"✅ Migration completed. Found {len(yaml_files)} YAML files in: {self.output_dir}")
+        
+        for yaml_file in yaml_files:
+            print(f"📄 Generated file: {yaml_file}")
+        
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
        
         complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
@@ -128,6 +152,9 @@ class TestMigrationIntegration(unittest.TestCase):
     def test_migration_multiple_pipelines_single_version_each(self):
         """Test that the migration script correctly exports multiple pipelines, each with a single version"""
        
+        print(f"🔄 Starting migration test: {self._testMethodName}")
+        print(f"📁 Output directory: {self.output_dir}")
+        
         with patch('sys.argv', [
             'migration.py',
             '--kfp-server-host', KFP_ENDPOINT,
@@ -137,6 +164,11 @@ class TestMigrationIntegration(unittest.TestCase):
             migrate()        
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
+        print(f"✅ Migration completed. Found {len(yaml_files)} YAML files in: {self.output_dir}")
+        
+        for yaml_file in yaml_files:
+            print(f"📄 Generated file: {yaml_file}")
+        
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
        
         pipeline_count = len([f for f in yaml_files if "kind: Pipeline" in f.read_text()])
@@ -148,6 +180,9 @@ class TestMigrationIntegration(unittest.TestCase):
     def test_migration_multiple_pipelines_multiple_versions_different_specs(self):
         """Test that the migration script correctly exports multiple pipelines with multiple versions having different specifications"""
         
+        print(f"🔄 Starting migration test: {self._testMethodName}")
+        print(f"📁 Output directory: {self.output_dir}")
+        
         with patch('sys.argv', [
             'migration.py',
             '--kfp-server-host', KFP_ENDPOINT,
@@ -157,6 +192,11 @@ class TestMigrationIntegration(unittest.TestCase):
             migrate()        
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
+        print(f"✅ Migration completed. Found {len(yaml_files)} YAML files in: {self.output_dir}")
+        
+        for yaml_file in yaml_files:
+            print(f"📄 Generated file: {yaml_file}")
+        
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")     
       
         pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name or "complex-pipeline" in f.name]

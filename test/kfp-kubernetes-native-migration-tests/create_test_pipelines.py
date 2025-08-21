@@ -136,28 +136,33 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
         client = kfp.Client(host=KFP_ENDPOINT)
         
         # Create run using the KFP client's internal API
-        import kfp_server_api
+        from kfp_server_api.models.api_run import ApiRun
+        from kfp_server_api.models.api_pipeline_spec import ApiPipelineSpec
+        from kfp_server_api.models.api_resource_reference import ApiResourceReference
+        from kfp_server_api.models.api_resource_key import ApiResourceKey
+        from kfp_server_api.models.api_resource_type import ApiResourceType
+        from kfp_server_api.models.api_relationship import ApiRelationship
         
         # Create the run body using the proper API model
-        run_body = kfp_server_api.V1Run(
+        run_body = ApiRun(
             name=name,
-            pipeline_spec=kfp_server_api.V1PipelineSpec(
+            pipeline_spec=ApiPipelineSpec(
                 parameters=parameters or []
             ),
             resource_references=[
-                kfp_server_api.V1ResourceReference(
-                    key=kfp_server_api.V1ResourceKey(
+                ApiResourceReference(
+                    key=ApiResourceKey(
                         id=pipeline_version_id,
-                        type=kfp_server_api.V1ResourceType.PIPELINE_VERSION
+                        type=ApiResourceType.PIPELINE_VERSION
                     ),
-                    relationship=kfp_server_api.V1Relationship.OWNER
+                    relationship=ApiRelationship.OWNER
                 ),
-                kfp_server_api.V1ResourceReference(
-                    key=kfp_server_api.V1ResourceKey(
+                ApiResourceReference(
+                    key=ApiResourceKey(
                         id=experiment_id,
-                        type=kfp_server_api.V1ResourceType.EXPERIMENT
+                        type=ApiResourceType.EXPERIMENT
                     ),
-                    relationship=kfp_server_api.V1Relationship.OWNER
+                    relationship=ApiRelationship.OWNER
                 )
             ]
         )
@@ -166,7 +171,7 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
         run_data = client._run_api.run_service_create_run(run=run_body)
         
         return {
-            "id": run_data.run_id,
+            "id": run_data.id,
             "name": run_data.name or name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
@@ -193,27 +198,34 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
         client = kfp.Client(host=KFP_ENDPOINT)
         
         # Create recurring run using the KFP client's internal API
-        import kfp_server_api
+        from kfp_server_api.models.api_job import ApiJob
+        from kfp_server_api.models.api_pipeline_spec import ApiPipelineSpec
+        from kfp_server_api.models.api_resource_reference import ApiResourceReference
+        from kfp_server_api.models.api_resource_key import ApiResourceKey
+        from kfp_server_api.models.api_resource_type import ApiResourceType
+        from kfp_server_api.models.api_relationship import ApiRelationship
+        from kfp_server_api.models.api_trigger import ApiTrigger
+        from kfp_server_api.models.api_cron_schedule import ApiCronSchedule
         
         # Create the recurring run body using the proper API model
-        recurring_run_body = kfp_server_api.V1Job(
+        recurring_run_body = ApiJob(
             name=name,
-            pipeline_spec=kfp_server_api.V1PipelineSpec(
+            pipeline_spec=ApiPipelineSpec(
                 pipeline_id=pipeline_id,
                 pipeline_version_id=pipeline_version_id,
                 parameters=parameters or []
             ),
             resource_references=[
-                kfp_server_api.V1ResourceReference(
-                    key=kfp_server_api.V1ResourceKey(
+                ApiResourceReference(
+                    key=ApiResourceKey(
                         id=experiment_id,
-                        type=kfp_server_api.V1ResourceType.EXPERIMENT
+                        type=ApiResourceType.EXPERIMENT
                     ),
-                    relationship=kfp_server_api.V1Relationship.OWNER
+                    relationship=ApiRelationship.OWNER
                 )
             ],
-            trigger=kfp_server_api.V1Trigger(
-                cron_schedule=kfp_server_api.V1CronSchedule(
+            trigger=ApiTrigger(
+                cron_schedule=ApiCronSchedule(
                     cron=cron_expression
                 )
             )
