@@ -93,7 +93,7 @@ jobs:
           KFP_ENDPOINT: "http://localhost:8888"
         run: |
           echo "Running DB mode migration tests..."       
-          python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v -s
+          python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Install cert-manager
@@ -138,16 +138,16 @@ jobs:
         id: re-forward-api-port
         run: |
           echo "Re-establishing port forwarding after K8s mode switch..."
-          
+
           # Kill any existing port forwarding
           pkill -f "kubectl port-forward.*ml-pipeline" || echo "No existing port forwarding to kill"
-          
+
           # Wait a moment for cleanup
           sleep 5
-          
+
           # Re-establish port forwarding
           ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
-          
+
           # Wait for port forwarding to be ready
           sleep 10
         continue-on-error: true
@@ -200,7 +200,7 @@ jobs:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v -s
+        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Collect failed logs
