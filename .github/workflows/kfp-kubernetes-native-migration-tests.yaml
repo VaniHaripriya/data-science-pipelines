@@ -138,69 +138,19 @@ jobs:
         id: re-forward-api-port
         run: |
           echo "Re-establishing port forwarding after K8s mode switch..."
-
           # Kill any existing port forwarding
           pkill -f "kubectl port-forward.*ml-pipeline" || echo "No existing port forwarding to kill"
-
-          # Wait a moment for cleanup
-          sleep 5
-
-          # Re-establish port forwarding
           ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
-
-          # Wait for port forwarding to be ready
-          sleep 10
-        continue-on-error: true
-
-      - name: Verify KFP accessibility
-        if: ${{ steps.re-forward-api-port.outcome == 'success' }}
-        id: verify-kfp-accessibility
-        run: |
-          echo "Verifying KFP is accessible after mode switch..."
-
-          # Check if KFP pods are running
-          echo "Checking KFP pods status:"
-          kubectl get pods -n kubeflow | grep ml-pipeline
-
-          # Wait a bit for port forwarding to stabilize
-          sleep 10
-
-          # Test KFP API accessibility
-          echo "Testing KFP API accessibility..."
-          max_retries=5
-          for i in $(seq 1 $max_retries); do
-            echo "Attempt $i/$max_retries to connect to KFP API..."
-            if curl -f -s http://localhost:8888/apis/v2beta1/healthz > /dev/null; then
-              echo "✅ KFP API is accessible on localhost:8888"
-              break
-            else
-              echo "⚠️ Attempt $i failed, KFP API not accessible"
-              if [ $i -eq $max_retries ]; then
-                echo "❌ KFP API not accessible after $max_retries attempts"
-                echo "Current port forwarding status:"
-                ps aux | grep "kubectl port-forward" || echo "No port forwarding processes found"
-                echo "Current KFP pods:"
-                kubectl get pods -n kubeflow | grep ml-pipeline
-                exit 1
-              fi
-              sleep 10
-            fi
-          done
-
-          # Additional verification - test the health endpoint
-          echo "Testing KFP health endpoint..."
-          curl -f http://localhost:8888/apis/v2beta1/healthz
-          echo "✅ KFP health check passed"
         continue-on-error: true
 
       - name: Run K8s mode migration tests
-        if: ${{ steps.verify-kfp-accessibility.outcome == 'success' }}
+        if: ${{ steps.re-forward-api-port.outcome == 'success' }}
         id: run-k8s-mode-tests
         env:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v
+        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_k8s_mode_migration_tests.py -v -s
         continue-on-error: true
 
       - name: Collect failed logs
