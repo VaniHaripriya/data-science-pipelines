@@ -172,9 +172,13 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
             params=run_params
         )
         
+        # Handle V2beta1Run object attributes
+        run_id = getattr(run_data, 'run_id', None) or getattr(run_data, 'id', None)
+        run_name = getattr(run_data, 'display_name', None) or getattr(run_data, 'name', None) or name
+        
         return {
-            "id": run_data.id,
-            "name": run_data.name or name,
+            "id": run_id,
+            "name": run_name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
@@ -216,9 +220,13 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
             params=run_params
         )
         
+        # Handle V2beta1RecurringRun object attributes
+        recurring_run_id = getattr(recurring_run_data, 'recurring_run_id', None) or getattr(recurring_run_data, 'id', None)
+        recurring_run_name = getattr(recurring_run_data, 'display_name', None) or getattr(recurring_run_data, 'name', None) or name
+        
         return {
-            "id": recurring_run_data.id,
-            "name": recurring_run_data.name or name,
+            "id": recurring_run_id,
+            "name": recurring_run_name,
             "pipeline_spec": {
                 "pipeline_id": pipeline_id,
                 "pipeline_version_id": pipeline_version_id
