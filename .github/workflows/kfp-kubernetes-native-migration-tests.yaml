@@ -93,7 +93,7 @@ jobs:
           KFP_ENDPOINT: "http://localhost:8888"
         run: |
           echo "Running DB mode migration tests..."       
-          python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
+          python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v -s
         continue-on-error: true
 
       - name: Install cert-manager
