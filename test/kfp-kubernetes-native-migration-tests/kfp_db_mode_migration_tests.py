@@ -52,8 +52,16 @@ class TestMigrationIntegration(unittest.TestCase):
 
     def setUp(self):
         """Set up for each test."""
-        self.output_dir = Path(self.temp_dir) / f"migration_output_{self._testMethodName}"
+        # Use a shared persistent directory that K8s mode tests can access
+        shared_migration_base = Path("/tmp/kfp_shared_migration_outputs")
+        shared_migration_base.mkdir(exist_ok=True)
+        
+        self.output_dir = shared_migration_base / f"migration_output_{self._testMethodName}"
         self.output_dir.mkdir(exist_ok=True)
+        
+        # Also write to the legacy temp directory for cleanup
+        self.legacy_output_dir = Path(self.temp_dir) / f"migration_output_{self._testMethodName}"
+        self.legacy_output_dir.mkdir(exist_ok=True)
         
         # Write the migration output directory to a shared location for K8s mode tests
         migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")

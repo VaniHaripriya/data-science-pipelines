@@ -467,27 +467,37 @@ class TestK8sModeMigration(unittest.TestCase):
         
         try:
             # First, check if we have migrated YAML files from the DB mode migration
-            # Check the shared location file first
-            migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")
+            # Priority 1: Check the shared persistent directory
+            shared_migration_base = Path("/tmp/kfp_shared_migration_outputs")
             migrated_yaml_dir = None
             
-            if migration_info_file.exists():
-                with open(migration_info_file) as f:
-                    migration_dir = f.read().strip()
-                    if migration_dir and Path(migration_dir).exists():
-                        migrated_yaml_dir = Path(migration_dir)
-                        print(f"Found migration output directory from shared location: {migrated_yaml_dir}")
+            if shared_migration_base.exists():
+                # Find the most recent migration output directory
+                migration_dirs = list(shared_migration_base.glob("migration_output_*"))
+                if migration_dirs:
+                    migrated_yaml_dir = max(migration_dirs, key=os.path.getctime)
+                    print(f"Found migration output directory in shared location: {migrated_yaml_dir}")
             
+            # Priority 2: Check the shared location file
             if not migrated_yaml_dir:
-                # Look for the temp directory pattern used by DB mode tests
+                migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")
+                if migration_info_file.exists():
+                    with open(migration_info_file) as f:
+                        migration_dir = f.read().strip()
+                        if migration_dir and Path(migration_dir).exists():
+                            migrated_yaml_dir = Path(migration_dir)
+                            print(f"Found migration output directory from info file: {migrated_yaml_dir}")
+            
+            # Priority 3: Look for temp directory pattern used by DB mode tests
+            if not migrated_yaml_dir:
                 possible_migration_dirs = glob.glob("/tmp/tmp*/migration_output_*")
                 
                 if possible_migration_dirs:
                     # Use the most recent migration output directory
                     migrated_yaml_dir = Path(max(possible_migration_dirs, key=os.path.getctime))
-                    print(f"Found migration output directory: {migrated_yaml_dir}")
+                    print(f"Found migration output directory from temp pattern: {migrated_yaml_dir}")
                 else:
-                    # Fallback to traditional locations
+                    # Priority 4: Fallback to traditional locations
                     migrated_yaml_dir = Path("./kfp-exported-pipelines")
                     if not migrated_yaml_dir.exists():
                         print("⚠️ No migrated YAML directory found, checking other locations...")
