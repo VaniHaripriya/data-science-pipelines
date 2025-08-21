@@ -29,8 +29,7 @@ KFP_NAMESPACE = os.environ.get('KFP_NAMESPACE', 'kubeflow')
 
 # Define simple pipeline functions for testing
 @dsl.container_component
-def print_hello_op():
-    """Simple component that prints a message."""
+def print_hello_op():    
     return dsl.ContainerSpec(
         image="python:3.9",
         command=["python", "-c"],
@@ -137,8 +136,6 @@ def create_experiment(name, description):
             name=name,
             description=description
         )
-        
-        # Handle V2beta1Experiment object attributes
         experiment_id = getattr(experiment, 'experiment_id', None) or getattr(experiment, 'id', None)
         experiment_name = getattr(experiment, 'display_name', None) or getattr(experiment, 'name', None) or name
         
@@ -155,15 +152,12 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
     """Create a pipeline run in KFP Database mode."""
     try:
         client = Client(host=KFP_ENDPOINT)
-        
-        # Convert parameters to the format expected by KFP client
         run_params = {}
         if parameters:
             for param in parameters:
                 if isinstance(param, dict) and "name" in param and "value" in param:
-                    run_params[param["name"]] = param["value"]
-        
-        # Create run using the KFP client's run_pipeline method
+                    run_params[param["name"]] = param["value"]       
+       
         run_data = client.run_pipeline(
             experiment_id=experiment_id,
             job_name=name,
@@ -171,8 +165,6 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
             version_id=pipeline_version_id,
             params=run_params
         )
-        
-        # Handle V2beta1Run object attributes
         run_id = getattr(run_data, 'run_id', None) or getattr(run_data, 'id', None)
         run_name = getattr(run_data, 'display_name', None) or getattr(run_data, 'name', None) or name
         
@@ -202,15 +194,11 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
     """Create a recurring run in KFP Database mode."""
     try:
         client = Client(host=KFP_ENDPOINT)
-        
-        # Convert parameters to the format expected by KFP client
         run_params = {}
         if parameters:
             for param in parameters:
                 if isinstance(param, dict) and "name" in param and "value" in param:
                     run_params[param["name"]] = param["value"]
-        
-        # Create recurring run using the KFP client's create_recurring_run method
         recurring_run_data = client.create_recurring_run(
             experiment_id=experiment_id,
             job_name=name,
@@ -218,9 +206,7 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
             version_id=pipeline_version_id,
             cron_expression=cron_expression,
             params=run_params
-        )
-        
-        # Handle V2beta1RecurringRun object attributes
+        )       
         recurring_run_id = getattr(recurring_run_data, 'recurring_run_id', None) or getattr(recurring_run_data, 'id', None)
         recurring_run_name = getattr(recurring_run_data, 'display_name', None) or getattr(recurring_run_data, 'name', None) or name
         
@@ -250,8 +236,6 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
     except Exception as e:
         print(f"Failed to create recurring run {name}: {e}")
         return None
-
-
 
 def main():   
     print("Setting up test environment for KFP migration tests...")    
@@ -305,7 +289,7 @@ def main():
                 pipeline1["id"],
                 version1["id"],
                 "test-run",
-                parameters=None  # Simple pipeline doesn't require parameters
+                parameters=None
             )
             if run:
                 test_data["runs"].append(run)
@@ -318,8 +302,8 @@ def main():
                 pipeline2["id"],
                 version2_1["id"],
                 "test-recurring-run",
-                "0 0 * * *",  # Daily at midnight
-                parameters=None  # Complex pipeline doesn't require parameters in this test
+                "0 0 * * *",  
+                parameters=None 
             )
             if recurring_run:
                 test_data["recurring_runs"].append(recurring_run)
