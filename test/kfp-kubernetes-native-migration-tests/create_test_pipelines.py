@@ -20,58 +20,75 @@ import os
 from pathlib import Path
 import kfp
 import kfp.dsl as dsl
+from kfp.client import Client
 
 # Environment variables
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 KFP_UI_ENDPOINT = os.environ.get('KFP_UI_ENDPOINT', 'http://localhost:8080')
 KFP_NAMESPACE = os.environ.get('KFP_NAMESPACE', 'kubeflow')
 
-# Define pipeline functions using KFP DSL
-@dsl.component
-def print_hello(message: str):
+# Define simple pipeline functions for testing
+@dsl.container_component
+def print_hello_op():
     """Simple component that prints a message."""
-    print(f"Hello: {message}")
+    return dsl.ContainerSpec(
+        image="python:3.9",
+        command=["python", "-c"],
+        args=["print('Hello World')"]
+    )
 
-@dsl.component
-def data_preprocessing(input_data: str):
-    """Component for data preprocessing."""
-    print(f"Processing data: {input_data}")
+@dsl.container_component
+def data_preprocessing_op():
+    """Component for data preprocessing.""" 
+    return dsl.ContainerSpec(
+        image="python:3.9",
+        command=["python", "-c"],
+        args=["print('Processing data')"]
+    )
 
-@dsl.component
-def model_training(input_data: str):
+@dsl.container_component
+def model_training_op():
     """Component for model training."""
-    print(f"Training model with input: {input_data}")
+    return dsl.ContainerSpec(
+        image="python:3.9",
+        command=["python", "-c"],
+        args=["print('Training model')"]
+    )
 
-@dsl.component
-def model_evaluation(input_data: str):
+@dsl.container_component
+def model_evaluation_op():
     """Component for model evaluation."""
-    print(f"Evaluating model with input: {input_data}")
+    return dsl.ContainerSpec(
+        image="python:3.9",
+        command=["python", "-c"],
+        args=["print('Evaluating model')"]
+    )
 
 @dsl.pipeline(name="simple-pipeline")
 def simple_pipeline(message: str = "Hello World"):
     """A simple test pipeline."""
-    print_hello(message=message)
+    print_hello_op()
 
 @dsl.pipeline(name="complex-pipeline")
 def complex_pipeline(input_data: str = "test_data"):
     """A complex test pipeline with multiple components."""
-    preprocessing_task = data_preprocessing(input_data=input_data)
-    training_task = model_training(input_data=input_data)
+    preprocessing_task = data_preprocessing_op()
+    training_task = model_training_op()
     training_task.after(preprocessing_task)
 
 @dsl.pipeline(name="complex-pipeline-v2")
 def complex_pipeline_v2(input_data: str = "test_data"):
     """A complex test pipeline with multiple components including evaluation."""
-    preprocessing_task = data_preprocessing(input_data=input_data)
-    training_task = model_training(input_data=input_data)
-    evaluation_task = model_evaluation(input_data=input_data)
+    preprocessing_task = data_preprocessing_op()
+    training_task = model_training_op()
+    evaluation_task = model_evaluation_op()
     training_task.after(preprocessing_task)
     evaluation_task.after(training_task)
 
 def create_pipeline(name, description, pipeline_func):
     """Create a pipeline in KFP Database mode."""
     try:
-        client = kfp.Client(host=KFP_ENDPOINT)
+        client = Client(host=KFP_ENDPOINT)
         
         # Upload pipeline using KFP client from pipeline function
         pipeline = client.upload_pipeline_from_pipeline_func(
@@ -92,7 +109,7 @@ def create_pipeline(name, description, pipeline_func):
 def create_pipeline_version(pipeline_id, name, pipeline_func):
     """Create a pipeline version in KFP Database mode."""
     try:
-        client = kfp.Client(host=KFP_ENDPOINT)
+        client = Client(host=KFP_ENDPOINT)
         
         # Upload pipeline version using KFP client from pipeline function
         version = client.upload_pipeline_version_from_pipeline_func(
@@ -113,7 +130,7 @@ def create_pipeline_version(pipeline_id, name, pipeline_func):
 def create_experiment(name, description):
     """Create an experiment in KFP Database mode."""
     try:
-        client = kfp.Client(host=KFP_ENDPOINT)
+        client = Client(host=KFP_ENDPOINT)
         
         # Create experiment using KFP client
         experiment = client.create_experiment(
@@ -122,8 +139,8 @@ def create_experiment(name, description):
         )
         
         return {
-            "id": experiment.experiment_id,
-            "name": experiment.display_name,
+            "id": experiment.id,
+            "name": experiment.name,
             "description": description
         }
     except Exception as e:
@@ -133,42 +150,23 @@ def create_experiment(name, description):
 def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters=None):
     """Create a pipeline run in KFP Database mode."""
     try:
-        client = kfp.Client(host=KFP_ENDPOINT)
+        client = Client(host=KFP_ENDPOINT)
         
-        # Create run using the KFP client's internal API
-        from kfp_server_api.models.api_run import ApiRun
-        from kfp_server_api.models.api_pipeline_spec import ApiPipelineSpec
-        from kfp_server_api.models.api_resource_reference import ApiResourceReference
-        from kfp_server_api.models.api_resource_key import ApiResourceKey
-        from kfp_server_api.models.api_resource_type import ApiResourceType
-        from kfp_server_api.models.api_relationship import ApiRelationship
+        # Convert parameters to the format expected by KFP client
+        run_params = {}
+        if parameters:
+            for param in parameters:
+                if isinstance(param, dict) and "name" in param and "value" in param:
+                    run_params[param["name"]] = param["value"]
         
-        # Create the run body using the proper API model
-        run_body = ApiRun(
-            name=name,
-            pipeline_spec=ApiPipelineSpec(
-                parameters=parameters or []
-            ),
-            resource_references=[
-                ApiResourceReference(
-                    key=ApiResourceKey(
-                        id=pipeline_version_id,
-                        type=ApiResourceType.PIPELINE_VERSION
-                    ),
-                    relationship=ApiRelationship.OWNER
-                ),
-                ApiResourceReference(
-                    key=ApiResourceKey(
-                        id=experiment_id,
-                        type=ApiResourceType.EXPERIMENT
-                    ),
-                    relationship=ApiRelationship.OWNER
-                )
-            ]
+        # Create run using the KFP client's run_pipeline method
+        run_data = client.run_pipeline(
+            experiment_id=experiment_id,
+            job_name=name,
+            pipeline_id=pipeline_id,
+            version_id=pipeline_version_id,
+            params=run_params
         )
-        
-        # Use the client's internal run API
-        run_data = client._run_api.run_service_create_run(run=run_body)
         
         return {
             "id": run_data.id,
@@ -195,7 +193,7 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
 def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, cron_expression, parameters=None):
     """Create a recurring run in KFP Database mode."""
     try:
-        client = kfp.Client(host=KFP_ENDPOINT)
+        client = Client(host=KFP_ENDPOINT)
         
         # Create recurring run using the KFP client's internal API
         from kfp_server_api.models.api_job import ApiJob
