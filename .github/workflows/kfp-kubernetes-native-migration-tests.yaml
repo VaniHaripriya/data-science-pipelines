@@ -133,14 +133,6 @@ jobs:
           echo "KFP mode switch completed - now running in K8s mode"
         continue-on-error: true
 
-      - name: Re-forward API port after K8s mode switch
-        if: ${{ steps.switch-to-k8s-mode.outcome == 'success' }}
-        id: re-forward-api-port
-        run: |
-          echo "Re-establishing port forwarding after K8s mode switch..."
-          ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
-        continue-on-error: true
-
       - name: Verify KFP accessibility
         if: ${{ steps.re-forward-api-port.outcome == 'success' }}
         id: verify-kfp-accessibility
