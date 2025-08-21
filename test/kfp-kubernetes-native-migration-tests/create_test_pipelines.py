@@ -199,42 +199,22 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
     try:
         client = Client(host=KFP_ENDPOINT)
         
-        # Create recurring run using the KFP client's internal API
-        from kfp_server_api.models.api_job import ApiJob
-        from kfp_server_api.models.api_pipeline_spec import ApiPipelineSpec
-        from kfp_server_api.models.api_resource_reference import ApiResourceReference
-        from kfp_server_api.models.api_resource_key import ApiResourceKey
-        from kfp_server_api.models.api_resource_type import ApiResourceType
-        from kfp_server_api.models.api_relationship import ApiRelationship
-        from kfp_server_api.models.api_trigger import ApiTrigger
-        from kfp_server_api.models.api_cron_schedule import ApiCronSchedule
+        # Convert parameters to the format expected by KFP client
+        run_params = {}
+        if parameters:
+            for param in parameters:
+                if isinstance(param, dict) and "name" in param and "value" in param:
+                    run_params[param["name"]] = param["value"]
         
-        # Create the recurring run body using the proper API model
-        recurring_run_body = ApiJob(
-            name=name,
-            pipeline_spec=ApiPipelineSpec(
-                pipeline_id=pipeline_id,
-                pipeline_version_id=pipeline_version_id,
-                parameters=parameters or []
-            ),
-            resource_references=[
-                ApiResourceReference(
-                    key=ApiResourceKey(
-                        id=experiment_id,
-                        type=ApiResourceType.EXPERIMENT
-                    ),
-                    relationship=ApiRelationship.OWNER
-                )
-            ],
-            trigger=ApiTrigger(
-                cron_schedule=ApiCronSchedule(
-                    cron=cron_expression
-                )
-            )
+        # Create recurring run using the KFP client's create_recurring_run method
+        recurring_run_data = client.create_recurring_run(
+            experiment_id=experiment_id,
+            job_name=name,
+            pipeline_id=pipeline_id,
+            version_id=pipeline_version_id,
+            cron_expression=cron_expression,
+            params=run_params
         )
-        
-        # Use the client's internal job API
-        recurring_run_data = client._job_api.run_service_create_job(job=recurring_run_body)
         
         return {
             "id": recurring_run_data.id,
@@ -317,7 +297,7 @@ def main():
                 pipeline1["id"],
                 version1["id"],
                 "test-run",
-                parameters=[{"name": "param1", "value": "value1"}]
+                parameters=None  # Simple pipeline doesn't require parameters
             )
             if run:
                 test_data["runs"].append(run)
@@ -331,7 +311,7 @@ def main():
                 version2_1["id"],
                 "test-recurring-run",
                 "0 0 * * *",  # Daily at midnight
-                parameters=[{"name": "param1", "value": "value1"}]
+                parameters=None  # Complex pipeline doesn't require parameters in this test
             )
             if recurring_run:
                 test_data["recurring_runs"].append(recurring_run)

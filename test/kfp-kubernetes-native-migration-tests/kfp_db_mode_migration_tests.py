@@ -54,6 +54,11 @@ class TestMigrationIntegration(unittest.TestCase):
         """Set up for each test."""
         self.output_dir = Path(self.temp_dir) / f"migration_output_{self._testMethodName}"
         self.output_dir.mkdir(exist_ok=True)
+        
+        # Write the migration output directory to a shared location for K8s mode tests
+        migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")
+        with open(migration_info_file, "w") as f:
+            f.write(str(self.output_dir))
 
     def test_migration_single_pipeline_single_version(self): 
         """Test that the migration script correctly exports a single pipeline with single version from DB mode to Kubernetes native format"""

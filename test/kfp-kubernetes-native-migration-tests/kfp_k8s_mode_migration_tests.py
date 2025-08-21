@@ -21,6 +21,7 @@ import unittest
 import subprocess
 import requests
 import kfp
+import glob
 from pathlib import Path
 from unittest.mock import patch
 
@@ -465,14 +466,35 @@ class TestK8sModeMigration(unittest.TestCase):
         """Test applying migrated pipeline and pipeline version in K8s mode, creating a run, and verifying it matches the usual run"""
         
         try:
-            # First, check if we have migrated YAML files
-            migrated_yaml_dir = Path("./kfp-exported-pipelines")
-            if not migrated_yaml_dir.exists():
-                print("⚠️ No migrated YAML directory found, checking other locations...")
-                migrated_yaml_dir = Path("./tools/k8s-native")
-                if not migrated_yaml_dir.exists():
-                    print("⚠️ No migrated YAML files found, skipping test")
-                    return
+            # First, check if we have migrated YAML files from the DB mode migration
+            # Check the shared location file first
+            migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")
+            migrated_yaml_dir = None
+            
+            if migration_info_file.exists():
+                with open(migration_info_file) as f:
+                    migration_dir = f.read().strip()
+                    if migration_dir and Path(migration_dir).exists():
+                        migrated_yaml_dir = Path(migration_dir)
+                        print(f"Found migration output directory from shared location: {migrated_yaml_dir}")
+            
+            if not migrated_yaml_dir:
+                # Look for the temp directory pattern used by DB mode tests
+                possible_migration_dirs = glob.glob("/tmp/tmp*/migration_output_*")
+                
+                if possible_migration_dirs:
+                    # Use the most recent migration output directory
+                    migrated_yaml_dir = Path(max(possible_migration_dirs, key=os.path.getctime))
+                    print(f"Found migration output directory: {migrated_yaml_dir}")
+                else:
+                    # Fallback to traditional locations
+                    migrated_yaml_dir = Path("./kfp-exported-pipelines")
+                    if not migrated_yaml_dir.exists():
+                        print("⚠️ No migrated YAML directory found, checking other locations...")
+                        migrated_yaml_dir = Path("./tools/k8s-native")
+                        if not migrated_yaml_dir.exists():
+                            print("⚠️ No migrated YAML files found, skipping test")
+                            return
             
             # Find YAML files containing Pipeline and PipelineVersion resources
             yaml_files = list(migrated_yaml_dir.glob("*.yaml"))
