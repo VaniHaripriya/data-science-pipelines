@@ -138,9 +138,13 @@ def create_experiment(name, description):
             description=description
         )
         
+        # Handle V2beta1Experiment object attributes
+        experiment_id = getattr(experiment, 'experiment_id', None) or getattr(experiment, 'id', None)
+        experiment_name = getattr(experiment, 'display_name', None) or getattr(experiment, 'name', None) or name
+        
         return {
-            "id": experiment.id,
-            "name": experiment.name,
+            "id": experiment_id,
+            "name": experiment_name,
             "description": description
         }
     except Exception as e:
