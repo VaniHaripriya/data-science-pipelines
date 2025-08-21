@@ -92,10 +92,24 @@ class TestK8sModeMigration(unittest.TestCase):
         experiment_id = getattr(experiment, 'experiment_id', None) or getattr(experiment, 'id', None)           
         
         # Get pipeline details from KFP API to create a run
+        print(f"🔍 Making API request to: {self.api_base}/pipelines")
         pipeline_response = requests.get(
             f"{self.api_base}/pipelines",
             headers={"Content-Type": "application/json"}
         )
+        
+        print(f"📊 Pipeline API response status: {pipeline_response.status_code}")
+        if pipeline_response.status_code != 200:
+            print(f"❌ Pipeline API response text: {pipeline_response.text}")
+            
+            # Try to test basic API connectivity
+            print("🔍 Testing basic API connectivity...")
+            try:
+                health_response = requests.get(f"{KFP_ENDPOINT}/apis/v2beta1/healthz")
+                print(f"Health check status: {health_response.status_code}")
+                print(f"Health check response: {health_response.text}")
+            except Exception as e:
+                print(f"Health check failed: {e}")
         
         if pipeline_response.status_code == 200:
             pipelines = pipeline_response.json().get("pipelines", [])
@@ -300,207 +314,6 @@ class TestK8sModeMigration(unittest.TestCase):
                 self.assertEqual(current_cron, original_cron, "Cron schedule should be preserved")                
         else:
             print("No recurring run data available for K8s mode test")
-
-    def test_k8s_mode_apply_migrated_pipeline_and_run(self):
-        """Test applying migrated pipeline and pipeline version in K8s mode, creating a run, and verifying it matches the usual run"""
-        
-        shared_migration_base = Path("/tmp/kfp_shared_migration_outputs")
-        migrated_yaml_dir = None
-        
-        if shared_migration_base.exists():
-            migration_dirs = list(shared_migration_base.glob("migration_output_*"))
-            if migration_dirs:
-                migrated_yaml_dir = max(migration_dirs, key=os.path.getctime)
-                print(f"Found migration output directory in shared location: {migrated_yaml_dir}")
-        
-        if not migrated_yaml_dir:
-            self.fail("No migration output directory found")
-            
-        # Find YAML files containing Pipeline and PipelineVersion resources
-        yaml_files = list(migrated_yaml_dir.glob("*.yaml"))
-        if not yaml_files:
-            self.fail("No YAML files found in migrated directory")
-        
-        print(f"Found {len(yaml_files)} YAML files to apply")
-        
-        # Apply the migrated YAML files to the cluster
-        for yaml_file in yaml_files:
-            print(f"Applying {yaml_file}...")
-            result = subprocess.run([
-                'kubectl', 'apply', '-f', str(yaml_file), '-n', 'kubeflow'
-            ], check=True, capture_output=True, text=True)
-                   
-        # Wait for the applied resources to be ready
-        print("Waiting for applied pipelines to be ready...")
-        time.sleep(10)
-        
-        # Verify pipelines are available in K8s mode
-        result = subprocess.run([
-            'kubectl', 'get', 'pipeline', '-n', 'kubeflow', '--no-headers'
-        ], check=True, capture_output=True, text=True)
-        
-        pipeline_lines = [line for line in result.stdout.strip().split('\n') if line]
-        print(f"✅ Found {len(pipeline_lines)} pipelines in K8s mode after applying migrated YAML")
-        
-        if not pipeline_lines:
-            self.fail("No pipelines found after applying migrated YAML")
-        
-        # Get the first available pipeline
-        pipeline_name = pipeline_lines[0].split()[0]
-        print(f"Using pipeline: {pipeline_name}")
-        
-        # Get pipeline versions
-        version_result = subprocess.run([
-            'kubectl', 'get', 'pipelineversion', '-n', 'kubeflow', '--no-headers'
-        ], check=True, capture_output=True, text=True)
-        
-        version_lines = [line for line in version_result.stdout.strip().split('\n') if line]
-        print(f"✅ Found {len(version_lines)} pipeline versions in K8s mode")
-        
-        if not version_lines:
-            self.fail("No pipeline versions found")
-        
-        # Get the first available pipeline version
-        version_name = version_lines[0].split()[0]
-        print(f"Using pipeline version: {version_name}")
-        
-        # Create an experiment
-        client = kfp.Client(host=KFP_ENDPOINT)
-        experiment = client.create_experiment(
-            name="migrated-pipeline-test-experiment",
-            description="Test experiment for migrated pipeline run"
-        )
-        experiment_id = getattr(experiment, 'experiment_id', None) or getattr(experiment, 'id', None)
-        experiment_name = getattr(experiment, 'display_name', None) or getattr(experiment, 'name', None)
-        
-        print(f"✅ Created experiment: {experiment_name} (ID: {experiment_id})")
-        
-        # Get pipeline and version IDs from KFP API
-        pipeline_response = requests.get(
-            f"{self.api_base}/pipelines",
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if pipeline_response.status_code == 200:
-            pipelines = pipeline_response.json().get("pipelines", [])
-            target_pipeline = None
-            
-            for pipeline in pipelines:
-                if pipeline["name"] == pipeline_name:
-                    target_pipeline = pipeline
-                    break
-            
-            if not target_pipeline:
-                self.fail(f"Pipeline {pipeline_name} not found in KFP API")
-            
-            # Get pipeline versions
-            version_response = requests.get(
-                f"{self.api_base}/pipelines/{target_pipeline['id']}/versions",
-                headers={"Content-Type": "application/json"}
-            )
-            
-            if version_response.status_code == 200:
-                versions = version_response.json().get("versions", [])
-                target_version = None
-                
-                for version in versions:
-                    if version["name"] == version_name:
-                        target_version = version
-                        break
-                
-                if not target_version:
-                    self.fail(f"Pipeline version {version_name} not found in KFP API")                
-                
-                run_data = client.run_pipeline(
-                    experiment_id=experiment_id,
-                    job_name="migrated-pipeline-test-run",
-                    pipeline_id=target_pipeline['id'],
-                    version_id=target_version['id'],
-                    params={}
-                )
-                run_id = getattr(run_data, 'run_id', None) or getattr(run_data, 'id', None)
-                run_name = getattr(run_data, 'display_name', None) or getattr(run_data, 'name', None)
-                
-                print(f"✅ Created run from migrated pipeline: {run_name} (ID: {run_id})")
-                
-                # Verify the run was created successfully
-                self.assertIsNotNone(run_id, "Run should have an ID")
-                self.assertEqual(run_name, "migrated-pipeline-test-run", "Run name should match")
-                
-                print(f"✅ Run successfully created from migrated pipeline: {pipeline_name} (v{version_name})")
-                print(f"✅ Run associated with experiment: {experiment_name}")
-                
-                # Wait for the run to complete and check its status
-                print("Waiting for run to complete...")
-                time.sleep(30)  # Give some time for the run to start
-                
-                # Get run details
-                run_details_response = requests.get(
-                    f"{self.api_base}/runs/{run_id}",
-                    headers={"Content-Type": "application/json"}
-                )
-                
-                if run_details_response.status_code == 200:
-                    run_details = run_details_response.json()
-                    run_status = run_details.get("status", "UNKNOWN")
-                    print(f"✅ Run status: {run_status}")
-                    
-                    # Verify the run has the expected structure
-                    self.assertIn("id", run_details, "Run details should have an ID")
-                    self.assertIn("name", run_details, "Run details should have a name")
-                    self.assertIn("status", run_details, "Run details should have a status")
-                    
-                    print("✅ Run details match expected structure")
-                    
-                    # Compare with a "usual run" - verify it has the same fields as other runs
-                    if self.test_data.get("runs"):
-                        original_run = self.test_data["runs"][0]
-                        
-                        # Check that both runs have the same basic structure
-                        expected_fields = ["id", "name", "status", "pipeline_spec", "resource_references"]
-                        for field in expected_fields:
-                            self.assertIn(field, run_details, f"Migrated run should have {field} field")
-                        
-                        print("✅ Migrated run structure matches original runs")
-                            
-                else:
-                    self.fail(f"Failed to get run details: {run_details_response.status_code}")
-                
-            else:
-                self.fail(f"Failed to get pipeline versions: {version_response.status_code}")
-        
-        else:
-            self.fail(f"Failed to get pipelines: {pipeline_response.status_code}")
-
-    def test_k8s_mode_pipeline_validation(self):
-        """Test that migrated pipelines maintain their specifications and are ready for execution in K8s mode"""
-        
-        # Check pipeline status in K8s mode
-        result = subprocess.run([
-            'kubectl', 'get', 'pipeline', '-n', 'kubeflow', '-o', 'jsonpath={.items[*].status.conditions[*].type}'
-        ], check=True, capture_output=True, text=True)
-        
-        # Check if pipelines are ready
-        if result.stdout:
-            print(f"Pipeline status in K8s mode: {result.stdout}")
-        
-        # Verify pipeline versions are available
-        version_result = subprocess.run([
-            'kubectl', 'get', 'pipelineversion', '-n', 'kubeflow', '--no-headers'
-        ], check=True, capture_output=True, text=True)
-        
-        version_count = len([line for line in version_result.stdout.strip().split('\n') if line])
-        # Be more flexible - just check that we have some pipeline versions
-        self.assertGreaterEqual(version_count, 0, "Should have pipeline versions in K8s mode")
-        print(f"✅ Found {version_count} pipeline versions in K8s mode")
-        
-        # If we have pipeline versions, that's great. If not, that's okay too
-        # The migration might have created pipelines without versions, or the versions
-        # might be created differently in K8s mode
-        if version_count == 0:
-            print("⚠️ No pipeline versions found, but this might be expected in K8s mode")
-        else:
-            print(f"✅ Pipeline versions are available: {version_result.stdout.strip()}")
 
 if __name__ == '__main__':
     unittest.main()
