@@ -141,6 +141,7 @@ jobs:
           # Kill any existing port forwarding
           pkill -f "kubectl port-forward.*ml-pipeline" || echo "No existing port forwarding to kill"
           ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
+          sleep 20
         continue-on-error: true
 
       - name: Run K8s mode migration tests
