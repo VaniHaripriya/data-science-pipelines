@@ -218,8 +218,50 @@ jobs:
           echo "✅ KFP health check passed - API is fully accessible"
         continue-on-error: true
 
-      - name: Run K8s mode migration tests
+      - name: Apply migrated pipelines to K8s mode
         if: ${{ steps.verify-kfp-accessibility.outcome == 'success' }}
+        id: apply-migrated-pipelines
+        run: |
+          echo "Applying migrated pipeline YAML files to K8s cluster..."
+          
+          # Find the migration output directory
+          shared_migration_base="/tmp/kfp_shared_migration_outputs"
+          if [ -d "$shared_migration_base" ]; then
+            # Get the most recent migration output directory
+            migrated_yaml_dir=$(find "$shared_migration_base" -name "migration_output_*" -type d -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
+            
+            if [ -n "$migrated_yaml_dir" ] && [ -d "$migrated_yaml_dir" ]; then
+              echo "Found migration output directory: $migrated_yaml_dir"
+              
+              # Apply all YAML files
+              for yaml_file in "$migrated_yaml_dir"/*.yaml; do
+                if [ -f "$yaml_file" ]; then
+                  echo "Applying $(basename "$yaml_file")..."
+                  kubectl apply -f "$yaml_file" -n kubeflow || echo "Failed to apply $yaml_file (may already exist)"
+                fi
+              done
+              
+              # Wait for resources to be ready
+              echo "Waiting for applied pipelines to be ready..."
+              sleep 10
+              
+              # Verify pipelines were applied
+              echo "Verifying migrated pipelines in K8s mode:"
+              kubectl get pipeline -n kubeflow
+              kubectl get pipelineversion -n kubeflow
+              
+            else
+              echo "No migration output directory found"
+              exit 1
+            fi
+          else
+            echo "Migration output base directory not found"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Run K8s mode migration tests
+        if: ${{ steps.verify-kfp-accessibility.outcome == 'success' && steps.apply-migrated-pipelines.outcome == 'success' }}
         id: run-k8s-mode-tests
         env:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
