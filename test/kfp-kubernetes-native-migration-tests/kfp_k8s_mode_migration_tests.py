@@ -40,7 +40,7 @@ class TestK8sModeMigration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test environment."""
-        cls.api_base = f"{KFP_ENDPOINT}/api/v2beta1"
+        cls.api_base = f"{KFP_ENDPOINT}/apis/v2beta1"
         cls.temp_dir = tempfile.mkdtemp()        
         
         test_data_file = Path("migration_test_data.json")
@@ -178,19 +178,19 @@ class TestK8sModeMigration(unittest.TestCase):
             
             result = subprocess.run([
                 'kubectl', 'apply', '-f', temp_file
+            ], capture_output=True, text=True)            
+           
+            # Verify only one pipeline with this name exists
+            check_result = subprocess.run([
+                'kubectl', 'get', 'pipeline', existing_pipeline_name, '-n', 'kubeflow'
             ], capture_output=True, text=True)
-            
-            # Check the result of applying duplicate pipeline
+
+              # Check the result of applying duplicate pipeline
             print(f"kubectl apply result code: {result.returncode}")
             if result.stdout:
                 print(f"kubectl apply stdout: {result.stdout.strip()}")
             if result.stderr:
                 print(f"kubectl apply stderr: {result.stderr.strip()}")
-            
-            # Verify only one pipeline with this name exists
-            check_result = subprocess.run([
-                'kubectl', 'get', 'pipeline', existing_pipeline_name, '-n', 'kubeflow'
-            ], capture_output=True, text=True)
             
             if check_result.returncode == 0:
                
