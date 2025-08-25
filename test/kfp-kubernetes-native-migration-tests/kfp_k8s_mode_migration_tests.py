@@ -239,6 +239,12 @@ class TestK8sModeMigration(unittest.TestCase):
         
         # Use the same approach as the working test_k8s_mode_pipeline_execution
         print("Getting pipeline 'simple-pipeline' using KFP client...")
+        
+        # First check what pipelines are available
+        available_pipelines = client.list_pipelines()
+        pipeline_list = available_pipelines.pipelines if hasattr(available_pipelines, 'pipelines') else []
+        print(f"Available pipelines: {[p.display_name for p in pipeline_list]}")
+        
         pipeline = client.get_pipeline(pipeline_name="simple-pipeline")
         pipeline_id = getattr(pipeline, 'pipeline_id', None) or getattr(pipeline, 'id', None)
         
