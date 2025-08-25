@@ -223,7 +223,7 @@ jobs:
         id: apply-migrated-pipelines
         run: |
           echo "Applying migrated pipeline YAML files to K8s cluster..."
-          
+
           # Find the migration output directory
           shared_migration_base="/tmp/kfp_shared_migration_outputs"
           if [ -d "$shared_migration_base" ]; then
