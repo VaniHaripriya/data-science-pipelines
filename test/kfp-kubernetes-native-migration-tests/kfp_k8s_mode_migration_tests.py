@@ -238,7 +238,7 @@ class TestK8sModeMigration(unittest.TestCase):
         self.assertEqual(experiment_name, "k8s-mode-test-experiment", "Experiment name should match")
         
         # Get available pipelines using KFP client instead of REST API
-        print("🔍 Getting available pipelines using KFP client...")
+        print("Getting available pipelines using KFP client...")
         pipelines = client.list_pipelines()
         pipeline_list = pipelines.pipelines if hasattr(pipelines, 'pipelines') else []
         
