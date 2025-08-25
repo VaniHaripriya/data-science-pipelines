@@ -29,7 +29,7 @@ kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME"
 echo "DEBUG: Running $APP_NAME pods only:"
 kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running
 
-POD_NAME=$(kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running --sort-by='.metadata.creationTimestamp' -o jsonpath='{.items[-1].metadata.name}')
 echo "POD_NAME=$POD_NAME"
 
 if [ -z "$POD_NAME" ]; then
