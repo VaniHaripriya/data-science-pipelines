@@ -146,7 +146,7 @@ jobs:
             exit 1
           fi
                    
-          kubectl apply -f "$migrated_yaml_dir"/*.yaml -n kubeflow --ignore-not-found=true
+          kubectl apply -f "$migrated_yaml_dir"/*.yaml -n kubeflow
 
           # Verify pipelines were applied
           echo "Verifying migrated pipelines in K8s mode:"
