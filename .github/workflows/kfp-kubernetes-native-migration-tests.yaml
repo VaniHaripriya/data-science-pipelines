@@ -135,7 +135,7 @@ jobs:
         continue-on-error: true
 
       - name: Apply migrated pipelines to K8s mode
-        if: ${{ steps.verify-kfp-accessibility.outcome == 'success' }}
+        if: ${{ steps.re-forward-api-port.outcome == 'success' }}
         id: apply-migrated-pipelines
         run: |
           # Find and apply YAML files from most recent migration output
@@ -154,7 +154,7 @@ jobs:
         continue-on-error: true
 
       - name: Run K8s mode migration tests
-        if: ${{ steps.verify-kfp-accessibility.outcome == 'success' && steps.apply-migrated-pipelines.outcome == 'success' }}
+        if: ${{ steps.apply-migrated-pipelines.outcome == 'success' }}
         id: run-k8s-mode-tests
         env:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
@@ -164,7 +164,7 @@ jobs:
         continue-on-error: true
 
       - name: Collect failed logs
-        if: ${{ steps.create-kfp-cluster.outcome != 'success' || steps.forward-api-port.outcome != 'success' || steps.run-db-mode-tests.outcome != 'success' || steps.switch-to-k8s-mode.outcome != 'success' || steps.re-forward-api-port.outcome != 'success' || steps.verify-kfp-accessibility.outcome != 'success' || steps.run-k8s-mode-tests.outcome != 'success' }}
+        if: ${{ steps.create-kfp-cluster.outcome != 'success' || steps.forward-api-port.outcome != 'success' || steps.run-db-mode-tests.outcome != 'success' || steps.switch-to-k8s-mode.outcome != 'success' || steps.re-forward-api-port.outcome != 'success' || steps.run-k8s-mode-tests.outcome != 'success' }}
         run: |
           ./.github/resources/scripts/collect-logs.sh --ns kubeflow --output /tmp/tmp_pod_log.txt
           exit 1
