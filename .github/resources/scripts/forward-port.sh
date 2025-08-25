@@ -23,8 +23,19 @@ APP_NAME=$2
 LOCAL_PORT=$3
 REMOTE_PORT=$4
 
+# Debug: Show all pods first
+echo "DEBUG: All $APP_NAME pods:"
+kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" 
+echo "DEBUG: Running $APP_NAME pods only:"
+kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running
+
 POD_NAME=$(kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}')
 echo "POD_NAME=$POD_NAME"
+
+if [ -z "$POD_NAME" ]; then
+    echo "ERROR: No running pods found for app=$APP_NAME in namespace=$KUBEFLOW_NS"
+    exit 1
+fi
 
 if [ $QUIET -eq 1 ]; then
     kubectl port-forward -n "$KUBEFLOW_NS" "$POD_NAME" "$LOCAL_PORT:$REMOTE_PORT" > /dev/null 2>&1 &
