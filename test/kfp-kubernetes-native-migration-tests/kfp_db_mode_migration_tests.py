@@ -81,7 +81,7 @@ class TestMigrationIntegration(unittest.TestCase):
         
         yaml_files = list(self.output_dir.glob("*.yaml"))        
         for yaml_file in yaml_files:
-            print(f"📄 Generated file: {yaml_file}")
+            print(f"Generated file: {yaml_file}")
         
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
         
@@ -106,7 +106,7 @@ class TestMigrationIntegration(unittest.TestCase):
                 
         yaml_files = list(self.output_dir.glob("*.yaml"))        
         for yaml_file in yaml_files:
-            print(f"📄 Generated file: {yaml_file}")
+            print(f"Generated file: {yaml_file}")
         
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
         
@@ -131,7 +131,7 @@ class TestMigrationIntegration(unittest.TestCase):
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
         for yaml_file in yaml_files:
-            print(f"📄 Generated file: {yaml_file}")
+            print(f"Generated file: {yaml_file}")
         
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
        
@@ -160,7 +160,7 @@ class TestMigrationIntegration(unittest.TestCase):
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
         for yaml_file in yaml_files:
-            print(f"📄 Generated file: {yaml_file}")
+            print(f"Generated file: {yaml_file}")
         
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
        
@@ -183,7 +183,7 @@ class TestMigrationIntegration(unittest.TestCase):
         
         yaml_files = list(self.output_dir.glob("*.yaml"))
         for yaml_file in yaml_files:
-            print(f"📄 Generated file: {yaml_file}")
+            print(f"Generated file: {yaml_file}")
         
         self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")     
       

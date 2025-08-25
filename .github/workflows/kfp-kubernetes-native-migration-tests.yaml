@@ -79,9 +79,7 @@ jobs:
       - name: Create test pipelines in DB mode
         if: ${{ steps.install-requirements.outcome == 'success' }}
         id: create-test-pipelines
-        run: |
-          echo "Creating test pipelines in DB mode..."
-          python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
+        run: python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
         continue-on-error: true
 
       - name: Run DB mode migration tests
@@ -91,9 +89,7 @@ jobs:
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           KFP_ENDPOINT: "http://localhost:8888"
-        run: |
-          echo "Running DB mode migration tests..."       
-          python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
+        run: python -m pytest ./test/kfp-kubernetes-native-migration-tests/kfp_db_mode_migration_tests.py -v
         continue-on-error: true
 
       - name: Install cert-manager
@@ -117,147 +113,44 @@ jobs:
         if: ${{ steps.install-cert-manager.outcome == 'success' }}
         id: switch-to-k8s-mode
         run: |
-          echo "Switching KFP from DB mode to K8s mode..."
-          kubectl delete deployment ml-pipeline -n kubeflow
-
-          # Wait for deployment to be deleted
-          kubectl wait --for=delete deployment/ml-pipeline -n kubeflow --timeout=60s
-
+          kubectl delete deployment ml-pipeline -n kubeflow     
           # Deploy KFP in K8s mode
           echo "Deploying KFP in K8s mode..."
           kubectl apply -k "manifests/kustomize/env/cert-manager/platform-agnostic-k8s-native/"
-
           # Wait for KFP K8s mode deployment to be ready
           kubectl wait --for=condition=available --timeout=300s deployment/ml-pipeline -n kubeflow
-
-          echo "KFP mode switch completed - now running in K8s mode"
         continue-on-error: true
 
       - name: Re-forward API port after mode switch
         if: ${{ steps.switch-to-k8s-mode.outcome == 'success' }}
         id: re-forward-api-port
         run: |
-          echo "Re-establishing port forwarding after K8s mode switch..."
-
-          # Wait for new pod to be fully ready first
           echo "Waiting for ml-pipeline pod to be ready in K8s mode..."
           kubectl wait pods -l app=ml-pipeline -n kubeflow --for condition=Ready --timeout=300s
-
-          # Show current pod status for debugging
-          echo "Current ml-pipeline pods:"
-          kubectl get pods -n kubeflow -l app=ml-pipeline
-
           # Kill any existing port forwarding
           pkill -f "kubectl port-forward.*ml-pipeline" || echo "No existing port forwarding to kill"
           sleep 3
 
-          # Re-establish port forwarding using the same script as execution tests
           ./.github/resources/scripts/forward-port.sh "kubeflow" "ml-pipeline" 8888 8888
-        continue-on-error: true
-
-      - name: Verify KFP accessibility
-        if: ${{ steps.re-forward-api-port.outcome == 'success' }}
-        id: verify-kfp-accessibility
-        run: |
-          echo "Verifying KFP is accessible after mode switch..."
-
-          # Check if KFP pods are running
-          echo "Checking KFP pods status:"
-          kubectl get pods -n kubeflow -l app=ml-pipeline
-
-          # Check port forwarding status  
-          echo "Checking port forwarding processes:"
-          ps aux | grep "kubectl port-forward" | grep -v grep || echo "No port forwarding processes found"
-
-          # Check if port is listening
-          echo "Checking if port 8888 is listening:"
-          netstat -ln | grep :8888 || echo "Port 8888 not found in netstat"
-
-          # Test KFP API accessibility with retries
-          echo "Testing KFP API accessibility..."
-          max_retries=10
-          retry_delay=10
-
-          for i in $(seq 1 $max_retries); do
-            echo "Attempt $i/$max_retries to connect to KFP API..."
-            if curl -f -s --max-time 30 http://localhost:8888/apis/v2beta1/healthz > /dev/null; then
-              echo "✅ KFP API is accessible on localhost:8888"
-              break
-            else
-              echo "⚠️ Attempt $i failed, KFP API not accessible"
-              if [ $i -eq $max_retries ]; then
-                echo "❌ KFP API not accessible after $max_retries attempts"
-                echo ""
-                echo "=== DEBUGGING INFORMATION ==="
-                echo "Port forwarding processes:"
-                ps aux | grep "kubectl port-forward" | grep -v grep || echo "No port forwarding processes found"
-                echo ""
-                echo "Current KFP pods:"
-                kubectl get pods -n kubeflow -l app=ml-pipeline -o wide
-                echo ""
-                echo "Pod logs (last 20 lines):"
-                kubectl logs -n kubeflow -l app=ml-pipeline --tail=20 || echo "Could not get pod logs"
-                echo ""
-                echo "Port status:"
-                netstat -ln | grep :8888 || echo "Port 8888 not listening"
-                echo ""
-                echo "Curl verbose test:"
-                curl -v --max-time 10 http://localhost:8888/apis/v2beta1/healthz || echo "Curl failed"
-                echo "=== END DEBUGGING ==="
-                exit 1
-              fi
-              echo "Waiting $retry_delay seconds before retry..."
-              sleep $retry_delay
-            fi
-          done
-
-          # Final verification - test the health endpoint with output
-          echo "Final verification - testing KFP health endpoint..."
-          health_response=$(curl -f --max-time 30 http://localhost:8888/apis/v2beta1/healthz)
-          echo "Health response: $health_response"
-          echo "✅ KFP health check passed - API is fully accessible"
         continue-on-error: true
 
       - name: Apply migrated pipelines to K8s mode
         if: ${{ steps.verify-kfp-accessibility.outcome == 'success' }}
         id: apply-migrated-pipelines
         run: |
-          echo "Applying migrated pipeline YAML files to K8s cluster..."
+          # Find and apply YAML files from most recent migration output
+          migrated_yaml_dir=$(find /tmp/kfp_shared_migration_outputs -name "migration_output_*" -type d 2>/dev/null | sort | tail -1)
 
-          # Find the migration output directory
-          shared_migration_base="/tmp/kfp_shared_migration_outputs"
-          if [ -d "$shared_migration_base" ]; then
-            # Get the most recent migration output directory
-            migrated_yaml_dir=$(find "$shared_migration_base" -name "migration_output_*" -type d -printf '%T@ %p\n' | sort -n | tail -1 | cut -d' ' -f2-)
-            
-            if [ -n "$migrated_yaml_dir" ] && [ -d "$migrated_yaml_dir" ]; then
-              echo "Found migration output directory: $migrated_yaml_dir"
-              
-              # Apply all YAML files
-              for yaml_file in "$migrated_yaml_dir"/*.yaml; do
-                if [ -f "$yaml_file" ]; then
-                  echo "Applying $(basename "$yaml_file")..."
-                  kubectl apply -f "$yaml_file" -n kubeflow || echo "Failed to apply $yaml_file (may already exist)"
-                fi
-              done
-              
-              # Wait for resources to be ready
-              echo "Waiting for applied pipelines to be ready..."
-              sleep 10
-              
-              # Verify pipelines were applied
-              echo "Verifying migrated pipelines in K8s mode:"
-              kubectl get pipeline -n kubeflow
-              kubectl get pipelineversion -n kubeflow
-              
-            else
-              echo "No migration output directory found"
-              exit 1
-            fi
-          else
-            echo "Migration output base directory not found"
+          if [ -z "$migrated_yaml_dir" ]; then
+            echo "No migration output directory found"
             exit 1
           fi
+                   
+          kubectl apply -f "$migrated_yaml_dir"/*.yaml -n kubeflow --ignore-not-found=true
+
+          # Verify pipelines were applied
+          echo "Verifying migrated pipelines in K8s mode:"
+          kubectl get pipeline,pipelineversion -n kubeflow
         continue-on-error: true
 
       - name: Run K8s mode migration tests

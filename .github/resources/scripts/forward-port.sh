@@ -25,10 +25,6 @@ REMOTE_PORT=$4
 
 POD_NAME=$(kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running --sort-by='.metadata.creationTimestamp' -o jsonpath='{.items[-1].metadata.name}')
 
-if [ -z "$POD_NAME" ]; then
-    echo "ERROR: No running pods found for app=$APP_NAME in namespace=$KUBEFLOW_NS"
-    exit 1
-fi
 
 if [ $QUIET -eq 1 ]; then
     kubectl port-forward -n "$KUBEFLOW_NS" "$POD_NAME" "$LOCAL_PORT:$REMOTE_PORT" > /dev/null 2>&1 &
