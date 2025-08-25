@@ -184,13 +184,6 @@ class TestK8sModeMigration(unittest.TestCase):
             check_result = subprocess.run([
                 'kubectl', 'get', 'pipeline', existing_pipeline_name, '-n', 'kubeflow'
             ], capture_output=True, text=True)
-
-              # Check the result of applying duplicate pipeline
-            print(f"kubectl apply result code: {result.returncode}")
-            if result.stdout:
-                print(f"kubectl apply stdout: {result.stdout.strip()}")
-            if result.stderr:
-                print(f"kubectl apply stderr: {result.stderr.strip()}")
             
             if check_result.returncode == 0:
                
@@ -283,12 +276,16 @@ class TestK8sModeMigration(unittest.TestCase):
         )
         
         response.raise_for_status()
-        recurring_run = response.json()
-        print(f"Recurring run still exists in K8s mode: {recurring_run['name']} (ID: {recurring_run['id']})")
+        recurring_run = response.json()        
+       
+        current_run_name = getattr(recurring_run, 'display_name', recurring_run.get('display_name', recurring_run.get('name')))
+        current_run_id = getattr(recurring_run, 'recurring_run_id', recurring_run.get('recurring_run_id', recurring_run.get('id')))
+        
+        print(f"Recurring run still exists in K8s mode: {current_run_name} (ID: {current_run_id})")
         
         # Verify the recurring run has the same properties
-        self.assertEqual(recurring_run["name"], recurring_run_name, "Recurring run name should match")
-        self.assertEqual(recurring_run["id"], recurring_run_id, "Recurring run ID should match")
+        self.assertEqual(current_run_name, recurring_run_name, "Recurring run name should match")
+        self.assertEqual(current_run_id, recurring_run_id, "Recurring run ID should match")
         
         # Check if the cron schedule is preserved
         original_cron = original_recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron')
