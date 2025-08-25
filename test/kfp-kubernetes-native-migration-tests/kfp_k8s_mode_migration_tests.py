@@ -240,14 +240,22 @@ class TestK8sModeMigration(unittest.TestCase):
         # Use the same approach as the working test_k8s_mode_pipeline_execution
         print("Getting pipeline 'simple-pipeline' using KFP client...")
         
-        # First check what pipelines are available
-        available_pipelines = client.list_pipelines()
-        pipeline_list = available_pipelines.pipelines if hasattr(available_pipelines, 'pipelines') else []
+        # Use client to list pipelines - this should work in both DB and K8s mode
+        pipelines = client.list_pipelines()
+        pipeline_list = pipelines.pipelines if hasattr(pipelines, 'pipelines') else []
         print(f"Available pipelines: {[p.display_name for p in pipeline_list]}")
         
-        pipeline = client.get_pipeline(pipeline_name="simple-pipeline")
-        pipeline_id = getattr(pipeline, 'pipeline_id', None) or getattr(pipeline, 'id', None)
+        target_pipeline = None
+        for pipeline in pipeline_list:
+            pipeline_name = getattr(pipeline, 'display_name', None) or getattr(pipeline, 'name', None)
+            if pipeline_name == "simple-pipeline":
+                target_pipeline = pipeline
+                break
         
+        if not target_pipeline:
+            self.fail("Pipeline simple-pipeline not found via KFP client")
+        
+        pipeline_id = getattr(target_pipeline, 'pipeline_id', None) or getattr(target_pipeline, 'id', None)
         print(f"Found pipeline: simple-pipeline (ID: {pipeline_id})")
         
         # Get pipeline versions
