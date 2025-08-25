@@ -237,54 +237,36 @@ class TestK8sModeMigration(unittest.TestCase):
         self.assertIsNotNone(experiment_id, "Experiment should have an ID")
         self.assertEqual(experiment_name, "k8s-mode-test-experiment", "Experiment name should match")
         
-        # Get available pipelines using kubectl (more reliable in K8s mode)
-        print("Getting available pipelines using kubectl...")
-        pipeline_result = subprocess.run([
-            'kubectl', 'get', 'pipeline', '-n', 'kubeflow', '-o', 'jsonpath={.items[0].metadata.name}'
-        ], capture_output=True, text=True)
+        # Use the same approach as the working test_k8s_mode_pipeline_execution
+        print("Getting pipeline 'simple-pipeline' using KFP client...")
+        pipeline = client.get_pipeline(pipeline_name="simple-pipeline")
+        pipeline_id = getattr(pipeline, 'pipeline_id', None) or getattr(pipeline, 'id', None)
         
-        if pipeline_result.returncode == 0 and pipeline_result.stdout.strip():
-            pipeline_name = pipeline_result.stdout.strip()
-            print(f"Using pipeline: {pipeline_name}")
+        print(f"Found pipeline: simple-pipeline (ID: {pipeline_id})")
+        
+        # Get pipeline versions
+        versions = client.list_pipeline_versions(pipeline_id=pipeline_id)
+        version_list = versions.pipeline_versions if hasattr(versions, 'pipeline_versions') else []
+        
+        if version_list:
+            version = version_list[0]
+            version_id = getattr(version, 'pipeline_version_id', None) or getattr(version, 'id', None)
+            print(f"Found pipeline version (ID: {version_id})")
             
-            # Check if pipeline versions exist using kubectl
-            version_result = subprocess.run([
-                'kubectl', 'get', 'pipelineversion', '-n', 'kubeflow', '--field-selector=spec.pipelineName=' + pipeline_name,
-                '-o', 'jsonpath={.items[0].metadata.name}'
-            ], capture_output=True, text=True)
+            run_data = client.run_pipeline(
+                experiment_id=experiment_id,
+                job_name="k8s-mode-test-run",
+                pipeline_id=pipeline_id,
+                version_id=version_id
+            )
+            run_id = getattr(run_data, 'run_id', None) or getattr(run_data, 'id', None)
+            run_name = getattr(run_data, 'display_name', None) or getattr(run_data, 'name', None)
             
-            if version_result.returncode == 0 and version_result.stdout.strip():
-                print(f"Found pipeline version: {version_result.stdout.strip()}")
-                
-                # Get pipeline via KFP client for run creation
-                pipeline = client.get_pipeline(pipeline_name=pipeline_name)
-                pipeline_id = getattr(pipeline, 'pipeline_id', None) or getattr(pipeline, 'id', None)
-                
-                # Get first version via KFP client
-                versions = client.list_pipeline_versions(pipeline_id=pipeline_id)
-                version_list = versions.pipeline_versions if hasattr(versions, 'pipeline_versions') else []
-                
-                if version_list:
-                    version = version_list[0]
-                    version_id = getattr(version, 'pipeline_version_id', None) or getattr(version, 'id', None)
-                    
-                    run_data = client.run_pipeline(
-                        experiment_id=experiment_id,
-                        job_name="k8s-mode-test-run",
-                        pipeline_id=pipeline_id,
-                        version_id=version_id
-                    )
-                    run_id = getattr(run_data, 'run_id', None) or getattr(run_data, 'id', None)
-                    run_name = getattr(run_data, 'display_name', None) or getattr(run_data, 'name', None)
-                    
-                    self.assertIsNotNone(run_id, "Run should have an ID")
-                    self.assertEqual(run_name, "k8s-mode-test-run", "Run name should match")
-                else:
-                    self.fail("Pipeline versions exist in K8s but not accessible via KFP client")
-            else:
-                self.fail("No pipeline versions found in K8s mode")
+            self.assertIsNotNone(run_id, "Run should have an ID")
+            self.assertEqual(run_name, "k8s-mode-test-run", "Run name should match")
+            print(f"Successfully created run: {run_name} (ID: {run_id})")
         else:
-            self.fail("No pipelines available for run creation")
+            self.fail("No pipeline versions available for run creation")
 
     def test_k8s_mode_recurring_run_continuation(self):
         """Test that recurring runs created in DB mode continue to exist after switching to K8s mode"""

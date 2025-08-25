@@ -198,30 +198,6 @@ class TestMigrationIntegration(unittest.TestCase):
         content = complex_pipeline_file.read_text()
         version_count = content.count("kind: PipelineVersion")
         self.assertGreaterEqual(version_count, 2, "Complex pipeline should have multiple versions in the file")   
-    
-    # def test_migration_with_pipeline_files(self):
-    #     """Test that the migration script correctly exports pipelines created from pipeline files in the valid directory"""
-        
-    #     # This test would require uploading pipeline files from data/pipeline_files/valid
-    #     # For now, we test that the migration script can handle multiple pipelines
-    #     with patch('sys.argv', [
-    #         'migration.py',
-    #         '--kfp-server-host', KFP_ENDPOINT,
-    #         '--output', str(self.output_dir),
-    #         '--namespace', 'kubeflow'
-    #     ]):
-    #         migrate()        
-        
-    #     yaml_files = list(self.output_dir.glob("*.yaml"))
-    #     self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
-        
-    #     # Verify that all created pipelines were migrated
-    #     pipeline_count = len([f for f in yaml_files if "kind: Pipeline" in f.read_text()])
-    #     version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])
-        
-    #     self.assertGreaterEqual(pipeline_count, 2, "Should have migrated all pipelines")
-    #     self.assertGreaterEqual(version_count, 2, "Should have migrated all pipeline versions")
-
-
+   
 if __name__ == '__main__':
     unittest.main()
