@@ -23,8 +23,8 @@ APP_NAME=$2
 LOCAL_PORT=$3
 REMOTE_PORT=$4
 
-POD_NAME=$(kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" -o jsonpath='{.items[0].metadata.name}')
-echo "POD_NAME=$POD_NAME"
+POD_NAME=$(kubectl get pods -n "$KUBEFLOW_NS" -l "app=$APP_NAME" --field-selector=status.phase=Running --sort-by='.metadata.creationTimestamp' -o jsonpath='{.items[-1].metadata.name}')
+
 
 if [ $QUIET -eq 1 ]; then
     kubectl port-forward -n "$KUBEFLOW_NS" "$POD_NAME" "$LOCAL_PORT:$REMOTE_PORT" > /dev/null 2>&1 &
