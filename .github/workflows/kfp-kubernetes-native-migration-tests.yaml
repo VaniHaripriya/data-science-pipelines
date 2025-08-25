@@ -145,8 +145,19 @@ jobs:
             echo "No migration output directory found"
             exit 1
           fi
-                   
-          kubectl apply -f "$migrated_yaml_dir" -n kubeflow
+
+          for yaml_file in "$migrated_yaml_dir"/*.yaml; do
+            if [ -f "$yaml_file" ]; then
+              filename=$(basename "$yaml_file")
+              # Skip tutorial pipelines that come with deployment
+              if [[ "$filename" != *"tutorial"* ]]; then
+                echo "Applying $filename..."
+                kubectl apply -f "$yaml_file" -n kubeflow || echo "Failed to apply $filename (may already exist)"
+              else
+                echo "Skipping tutorial pipeline: $filename (already exists as default)"
+              fi
+            fi
+          done
 
           # Verify pipelines were applied
           echo "Verifying migrated pipelines in K8s mode:"
