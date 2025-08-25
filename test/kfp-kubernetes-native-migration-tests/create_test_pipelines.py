@@ -103,29 +103,18 @@ def create_pipeline(name, description, pipeline_func):
 
 def create_pipeline_version(pipeline_id, name, pipeline_func):
     """Create a pipeline version in KFP Database mode."""
-    import json
-    from kfp.compiler import Compiler
+    client = Client(host=KFP_ENDPOINT)
     
-    # Compile pipeline to get spec
-    compiler = Compiler()
-    pipeline_spec = compiler.compile(pipeline_func)
-    
-    # Create version via REST API
-    url = f"{KFP_ENDPOINT}/apis/v2beta1/pipelines/{pipeline_id}/versions"
-    headers = {"Content-Type": "application/json"}
-    
-    payload = {
-        "display_name": name,
-        "pipeline_spec": pipeline_spec
-    }
-    
-    response = requests.post(url, json=payload, headers=headers)
-    response.raise_for_status()
-    version_data = response.json()
+    # Upload pipeline version using KFP client from pipeline function
+    version = client.upload_pipeline_version_from_pipeline_func(
+        pipeline_func=pipeline_func,
+        pipeline_version_name=name,
+        pipeline_id=pipeline_id
+    )
     
     return {
-        "id": version_data.get("pipeline_version_id"),
-        "name": version_data.get("display_name", name),
+        "id": version.pipeline_version_id,
+        "name": version.display_name,
         "pipeline_id": pipeline_id
     }
 
