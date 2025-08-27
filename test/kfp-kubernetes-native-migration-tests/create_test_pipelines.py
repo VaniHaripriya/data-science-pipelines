@@ -63,7 +63,7 @@ def model_evaluation_op():
 
 @dsl.pipeline(name="simple-pipeline")
 def simple_pipeline(message: str = "Hello World"):
-    """A simple test pipeline."""
+    """A simple test pipeline..."""
     print_hello_op()
 
 @dsl.pipeline(name="complex-pipeline")
