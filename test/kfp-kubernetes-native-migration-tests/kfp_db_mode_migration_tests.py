@@ -374,23 +374,28 @@ def test_migration_multiple_pipelines_multiple_versions_different_specs(test_dat
     # Parse migrated resources
     migrated_resources = parse_yaml_files(output_dir)
     
-    # Verify we have complex and tutorial pipelines (available in migration output)
+    # Verify we have our test pipelines (simple and complex) in migration output
     pipelines = migrated_resources["Pipeline"]
+    simple_pipelines = [p for p in pipelines 
+                       if "simple-pipeline" in p.get("metadata", {}).get("name", "")]
     complex_pipelines = [p for p in pipelines 
                         if "complex-pipeline" in p.get("metadata", {}).get("name", "")]
-    tutorial_pipelines = [p for p in pipelines 
-                         if "tutorial-data-passing" in p.get("metadata", {}).get("name", "")]
     
+    # We should have at least our test pipelines (simple and complex)
+    assert len(simple_pipelines) >= 1, "Should have simple pipeline"
     assert len(complex_pipelines) >= 1, "Should have complex pipeline"
     
-    # Compare migrated pipelines with original test data
+    # Compare migrated pipelines with original test data (only for pipelines we created)
+    for migrated_pipeline in simple_pipelines:
+        original_pipeline = find_test_data_by_name(test_data, "pipelines", "simple-pipeline")
+        compare_pipeline_objects(migrated_pipeline, original_pipeline)
+    
     for migrated_pipeline in complex_pipelines:
         original_pipeline = find_test_data_by_name(test_data, "pipelines", "complex-pipeline")
         compare_pipeline_objects(migrated_pipeline, original_pipeline)
     
-    for migrated_pipeline in tutorial_pipelines:
-        original_pipeline = find_test_data_by_name(test_data, "pipelines", "tutorial-data-passing-in-python-components")
-        compare_pipeline_objects(migrated_pipeline, original_pipeline)
+    # Note: Tutorial pipelines may also be present in migration output, but we don't 
+    # validate them against test data since they weren't created by our test setup
     
     # Verify complex pipeline has versions (our test data has multiple versions)
     pipeline_versions = migrated_resources["PipelineVersion"]
