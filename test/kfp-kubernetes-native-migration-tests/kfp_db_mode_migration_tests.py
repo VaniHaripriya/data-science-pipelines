@@ -174,26 +174,26 @@ def test_migration_single_pipeline_single_version(test_data, run_migration):
     # Parse migrated resources
     migrated_resources = parse_yaml_files(output_dir)
     
-    # Find test-simple pipeline in test data and validate migration
-    original_pipeline = find_test_data_by_name(test_data, "pipelines", "test-simple")
+    # Find simple pipeline in test data and validate migration
+    original_pipeline = find_test_data_by_name(test_data, "pipelines", "simple-pipeline")
     
     # Verify Pipeline resource was created
     pipelines = migrated_resources["Pipeline"]
     assert len(pipelines) >= 1, "Should have at least one Pipeline resource"
     
-    # Find the test-simple pipeline in migrated resources
-    test_simple_pipeline_resources = [p for p in pipelines 
-                                     if "test-simple" in p.get("metadata", {}).get("name", "")]
-    assert len(test_simple_pipeline_resources) >= 1, "Should have migrated test-simple pipeline"
+    # Find the simple pipeline in migrated resources
+    simple_pipeline_resources = [p for p in pipelines 
+                                if "simple-pipeline" in p.get("metadata", {}).get("name", "")]
+    assert len(simple_pipeline_resources) >= 1, "Should have migrated simple-pipeline"
     
     # Compare migrated pipeline with original
-    migrated_pipeline = test_simple_pipeline_resources[0]
+    migrated_pipeline = simple_pipeline_resources[0]
     compare_pipeline_objects(migrated_pipeline, original_pipeline)
     
     # Verify pipeline versions exist (optional - some pipelines may not have separate versions)
     pipeline_versions = migrated_resources["PipelineVersion"]
-    test_simple_versions = [v for v in pipeline_versions 
-                           if "test-simple" in v.get("metadata", {}).get("name", "")]
+    simple_versions = [v for v in pipeline_versions 
+                      if "simple-pipeline" in v.get("metadata", {}).get("name", "")]
     # Note: Not all pipelines have separate PipelineVersion resources - this is valid
 
 
@@ -263,28 +263,28 @@ def test_migration_single_pipeline_multiple_versions_different_specs(test_data, 
     # Parse migrated resources
     migrated_resources = parse_yaml_files(output_dir)
     
-    # Find iris pipeline in test data (this pipeline has multiple versions with different specs)
-    original_iris_pipeline = find_test_data_by_name(test_data, "pipelines", "iris-pipeline")
+    # Find complex pipeline in test data (this pipeline has multiple versions with different specs)
+    original_complex_pipeline = find_test_data_by_name(test_data, "pipelines", "complex-pipeline")
     
-    # Verify iris pipeline was migrated
+    # Verify complex pipeline was migrated
     pipelines = migrated_resources["Pipeline"]
-    iris_pipeline_resources = [p for p in pipelines 
-                              if "iris-pipeline" in p.get("metadata", {}).get("name", "")]
-    assert len(iris_pipeline_resources) >= 1, "Should have migrated iris pipeline"
+    complex_pipeline_resources = [p for p in pipelines 
+                                 if "complex-pipeline" in p.get("metadata", {}).get("name", "")]
+    assert len(complex_pipeline_resources) >= 1, "Should have migrated complex pipeline"
     
-    # Compare migrated iris pipeline with original
-    migrated_iris_pipeline = iris_pipeline_resources[0]
-    compare_pipeline_objects(migrated_iris_pipeline, original_iris_pipeline)
+    # Compare migrated complex pipeline with original
+    migrated_complex_pipeline = complex_pipeline_resources[0]
+    compare_pipeline_objects(migrated_complex_pipeline, original_complex_pipeline)
     
-    # Verify versions exist for iris pipeline (our test data has 1 version)
+    # Verify versions exist for complex pipeline (our test data has multiple versions)
     pipeline_versions = migrated_resources["PipelineVersion"]
-    iris_versions = [v for v in pipeline_versions 
-                    if "iris-pipeline" in v.get("metadata", {}).get("name", "")]
-    assert len(iris_versions) >= 1, "Iris pipeline should have at least one version"
+    complex_versions = [v for v in pipeline_versions 
+                       if "complex-pipeline" in v.get("metadata", {}).get("name", "")]
+    assert len(complex_versions) >= 1, "Complex pipeline should have at least one version"
     
     # Validate each version has proper structure and unique specifications
     version_specs = []
-    for version in iris_versions:
+    for version in complex_versions:
         # Validate original ID annotation
         annotations = version.get('metadata', {}).get('annotations', {})
         assert 'pipelines.kubeflow.org/original-id' in annotations, "Each version should have original ID annotation"
@@ -374,29 +374,29 @@ def test_migration_multiple_pipelines_multiple_versions_different_specs(test_dat
     # Parse migrated resources
     migrated_resources = parse_yaml_files(output_dir)
     
-    # Verify we have iris and tutorial pipelines (available in migration output)
+    # Verify we have complex and tutorial pipelines (available in migration output)
     pipelines = migrated_resources["Pipeline"]
-    iris_pipelines = [p for p in pipelines 
-                     if "iris-pipeline" in p.get("metadata", {}).get("name", "")]
+    complex_pipelines = [p for p in pipelines 
+                        if "complex-pipeline" in p.get("metadata", {}).get("name", "")]
     tutorial_pipelines = [p for p in pipelines 
                          if "tutorial-data-passing" in p.get("metadata", {}).get("name", "")]
     
-    assert len(iris_pipelines) >= 1, "Should have iris pipeline"
+    assert len(complex_pipelines) >= 1, "Should have complex pipeline"
     
     # Compare migrated pipelines with original test data
-    for migrated_pipeline in iris_pipelines:
-        original_pipeline = find_test_data_by_name(test_data, "pipelines", "iris-pipeline")
+    for migrated_pipeline in complex_pipelines:
+        original_pipeline = find_test_data_by_name(test_data, "pipelines", "complex-pipeline")
         compare_pipeline_objects(migrated_pipeline, original_pipeline)
     
     for migrated_pipeline in tutorial_pipelines:
         original_pipeline = find_test_data_by_name(test_data, "pipelines", "tutorial-data-passing-in-python-components")
         compare_pipeline_objects(migrated_pipeline, original_pipeline)
     
-    # Verify iris pipeline has versions (our test data has 1 version)
+    # Verify complex pipeline has versions (our test data has multiple versions)
     pipeline_versions = migrated_resources["PipelineVersion"]
-    iris_versions = [v for v in pipeline_versions 
-                    if "iris-pipeline" in v.get("metadata", {}).get("name", "")]
-    assert len(iris_versions) >= 1, "Iris pipeline should have at least one version"
+    complex_versions = [v for v in pipeline_versions 
+                       if "complex-pipeline" in v.get("metadata", {}).get("name", "")]
+    assert len(complex_versions) >= 1, "Complex pipeline should have at least one version"
     
     # Validate comprehensive resource structure and object integrity
     for pipeline in pipelines:
