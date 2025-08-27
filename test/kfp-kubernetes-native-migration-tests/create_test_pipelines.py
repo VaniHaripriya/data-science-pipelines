@@ -18,64 +18,80 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+import tempfile
+
 import kfp
 import kfp.dsl as dsl
 from kfp.client import Client
-
+from kfp.compiler import Compiler
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
-# Define simple pipeline functions for testing
-@dsl.container_component
-def print_hello_op():    
-    return dsl.ContainerSpec(
-        image="python:3.9",
-        command=["python", "-c"],
-        args=["print('Hello World')"]
-    )
+# Define component functions without decorators (apply decorators in functions)
+def get_print_hello_op():
+    @dsl.container_component
+    def print_hello_op():    
+        return dsl.ContainerSpec(
+            image="python:3.9",
+            command=["python", "-c"],
+            args=["print('Hello World')"]
+        )
+    return print_hello_op
 
-@dsl.container_component
-def data_preprocessing_op():
-    """Component for data preprocessing.""" 
-    return dsl.ContainerSpec(
-        image="python:3.9",
-        command=["python", "-c"],
-        args=["print('Processing data')"]
-    )
+def get_data_preprocessing_op():
+    @dsl.container_component
+    def data_preprocessing_op():
+        """Component for data preprocessing.""" 
+        return dsl.ContainerSpec(
+            image="python:3.9",
+            command=["python", "-c"],
+            args=["print('Processing data')"]
+        )
+    return data_preprocessing_op
 
-@dsl.container_component
-def model_training_op():
-    """Component for model training."""
-    return dsl.ContainerSpec(
-        image="python:3.9",
-        command=["python", "-c"],
-        args=["print('Training model')"]
-    )
+def get_model_training_op():
+    @dsl.container_component
+    def model_training_op():
+        """Component for model training."""
+        return dsl.ContainerSpec(
+            image="python:3.9",
+            command=["python", "-c"],
+            args=["print('Training model')"]
+        )
+    return model_training_op
 
-@dsl.container_component
-def model_evaluation_op():
-    """Component for model evaluation."""
-    return dsl.ContainerSpec(
-        image="python:3.9",
-        command=["python", "-c"],
-        args=["print('Evaluating model')"]
-    )
+def get_model_evaluation_op():
+    @dsl.container_component
+    def model_evaluation_op():
+        """Component for model evaluation."""
+        return dsl.ContainerSpec(
+            image="python:3.9",
+            command=["python", "-c"],
+            args=["print('Evaluating model')"]
+        )
+    return model_evaluation_op
 
-@dsl.pipeline(name="simple-pipeline")
-def simple_pipeline(message: str = "Hello World"):
-    """A simple test pipeline..."""
+# Define pipeline functions without decorators
+def simple_pipeline_func(message: str = "Hello World"):
+    """A simple test pipeline."""
+    print_hello_op = get_print_hello_op()
     print_hello_op()
 
-@dsl.pipeline(name="complex-pipeline")
-def complex_pipeline(input_data: str = "test_data"):
+def complex_pipeline_func(input_data: str = "test_data"):
     """A complex test pipeline with multiple components."""
+    data_preprocessing_op = get_data_preprocessing_op()
+    model_training_op = get_model_training_op()
+    
     preprocessing_task = data_preprocessing_op()
     training_task = model_training_op()
     training_task.after(preprocessing_task)
 
-@dsl.pipeline(name="complex-pipeline-v2")
-def complex_pipeline_v2(input_data: str = "test_data"):
+def complex_pipeline_v2_func(input_data: str = "test_data"):
     """A complex test pipeline with multiple components including evaluation."""
+    data_preprocessing_op = get_data_preprocessing_op()
+    model_training_op = get_model_training_op()
+    model_evaluation_op = get_model_evaluation_op()
+    
     preprocessing_task = data_preprocessing_op()
     training_task = model_training_op()
     evaluation_task = model_evaluation_op()
@@ -86,11 +102,22 @@ def create_pipeline(name, description, pipeline_func):
     """Create a pipeline in KFP Database mode."""
     client = Client(host=KFP_ENDPOINT)
     
-    pipeline = client.upload_pipeline_from_pipeline_func(
-        pipeline_func=pipeline_func,
-        pipeline_name=name,
-        description=description
-    )
+    # Compile the pipeline to a temporary file first
+    compiler = Compiler()
+    with tempfile.NamedTemporaryFile(suffix='.yaml', delete=False) as tmp_file:
+        # Apply pipeline decorator and compile
+        pipeline_with_decorator = dsl.pipeline(name=name)(pipeline_func)
+        compiler.compile(pipeline_with_decorator, tmp_file.name)
+        
+        # Upload the compiled pipeline
+        pipeline = client.upload_pipeline(
+            pipeline_package_path=tmp_file.name,
+            pipeline_name=name,
+            description=description
+        )
+        
+        # Clean up temporary file
+        os.unlink(tmp_file.name)
     
     return {
         "id": pipeline.pipeline_id,
@@ -102,11 +129,22 @@ def create_pipeline_version(pipeline_id, name, pipeline_func):
     """Create a pipeline version in KFP Database mode."""
     client = Client(host=KFP_ENDPOINT)
     
-    version = client.upload_pipeline_version_from_pipeline_func(
-        pipeline_func=pipeline_func,
-        pipeline_version_name=name,
-        pipeline_id=pipeline_id
-    )
+    # Compile the pipeline to a temporary file first
+    compiler = Compiler()
+    with tempfile.NamedTemporaryFile(suffix='.yaml', delete=False) as tmp_file:
+        # Apply pipeline decorator and compile
+        pipeline_with_decorator = dsl.pipeline(name=f"version-{name}")(pipeline_func)
+        compiler.compile(pipeline_with_decorator, tmp_file.name)
+        
+        # Upload the pipeline version
+        version = client.upload_pipeline_version(
+            pipeline_package_path=tmp_file.name,
+            pipeline_version_name=name,
+            pipeline_id=pipeline_id
+        )
+        
+        # Clean up temporary file
+        os.unlink(tmp_file.name)
     
     return {
         "id": version.pipeline_version_id,
@@ -224,26 +262,26 @@ def main():
     }
     
     # Create simple pipeline
-    pipeline1 = create_pipeline("simple-pipeline", "A simple test pipeline", simple_pipeline)
+    pipeline1 = create_pipeline("simple-pipeline", "A simple test pipeline", simple_pipeline_func)
     test_data["pipelines"].append(pipeline1)
     print(f"Created pipeline: {pipeline1['name']} (ID: {pipeline1['id']})")
     
     # Create pipeline version
-    version1 = create_pipeline_version(pipeline1["id"], "v1", simple_pipeline)
+    version1 = create_pipeline_version(pipeline1["id"], "v1", simple_pipeline_func)
     test_data["pipelines"].append(version1)
     print(f"Created pipeline version: {version1['name']} (ID: {version1['id']})")
     
     # Create pipeline with multiple versions and different specs
-    pipeline2 = create_pipeline("complex-pipeline", "A complex test pipeline", complex_pipeline)
+    pipeline2 = create_pipeline("complex-pipeline", "A complex test pipeline", complex_pipeline_func)
     test_data["pipelines"].append(pipeline2)
     print(f"Created pipeline: {pipeline2['name']} (ID: {pipeline2['id']})")
     
     # Create two versions with different specs
-    version2_1 = create_pipeline_version(pipeline2["id"], "v1", complex_pipeline)
+    version2_1 = create_pipeline_version(pipeline2["id"], "v1", complex_pipeline_func)
     test_data["pipelines"].append(version2_1)
     print(f"Created pipeline version: {version2_1['name']} (ID: {version2_1['id']})")
     
-    version2_2 = create_pipeline_version(pipeline2["id"], "v2", complex_pipeline_v2)
+    version2_2 = create_pipeline_version(pipeline2["id"], "v2", complex_pipeline_v2_func)
     test_data["pipelines"].append(version2_2)
     print(f"Created pipeline version: {version2_2['name']} (ID: {version2_2['id']})")
     
