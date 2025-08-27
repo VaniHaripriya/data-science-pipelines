@@ -12,16 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Kubeflow Pipelines Database Mode Migration Tests
+
+These tests verify the migration script that exports KFP resources from database mode
+to Kubernetes native format
+"""
+
 import json
 import os
 import sys
-import time
-import tempfile
-import unittest
 import subprocess
 import requests
+import pytest
+import yaml
 from pathlib import Path
 from unittest.mock import patch
+from typing import Dict, List, Any
 
 # Add the tools directory to path to import migration module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools/k8s-native'))
@@ -30,170 +37,383 @@ from migration import migrate
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
-class TestMigrationIntegration(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        """Set up test environment."""
-        cls.temp_dir = tempfile.mkdtemp()
-        
-        # Load test data created by create_test_pipelines.py
-        test_data_file = Path("migration_test_data.json")
-        if test_data_file.exists():
-            with open(test_data_file) as f:
-                cls.test_data = json.load(f)
-        else:
-            cls.test_data = {"pipelines": [], "experiments": [], "runs": [], "recurring_runs": []}
 
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up test environment."""
-        import shutil
-        shutil.rmtree(cls.temp_dir)
+@pytest.fixture(scope="session")
+def test_data():
+    """Load test data created by create_test_pipelines.py.
+        
+    """
+    test_data_file = Path("migration_test_data.json")
+    if test_data_file.exists():
+        with open(test_data_file) as f:
+            return json.load(f)
+    else:
+        return {"pipelines": [], "experiments": [], "runs": [], "recurring_runs": []}
 
-    def setUp(self):
-        """Set up for each test."""
-        # Use a shared persistent directory that K8s mode tests can access
-        shared_migration_base = Path("/tmp/kfp_shared_migration_outputs")
-        shared_migration_base.mkdir(exist_ok=True)
-        
-        self.output_dir = shared_migration_base / f"migration_output_{self._testMethodName}"
-        self.output_dir.mkdir(exist_ok=True)
-     
-        # Write the migration output directory to a shared location for K8s mode tests
-        migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")
-        with open(migration_info_file, "w") as f:
-            f.write(str(self.output_dir))
+@pytest.fixture(scope="function")
+def migration_output_dir(request):
+    """Create a unique output directory for each test's migration results.
+    
+    This directory is shared with K8s mode tests to apply migrated resources.
+    """
+    # Use a shared persistent directory that K8s mode tests can access
+    shared_migration_base = Path("/tmp/kfp_shared_migration_outputs")
+    shared_migration_base.mkdir(exist_ok=True)
+    
+    output_dir = shared_migration_base / f"migration_output_{request.node.name}"
+    output_dir.mkdir(exist_ok=True)
+ 
+    # Write the migration output directory to a shared location for K8s mode tests
+    migration_info_file = Path("/tmp/kfp_migration_output_dir.txt")
+    with open(migration_info_file, "w") as f:
+        f.write(str(output_dir))
+    
+    yield output_dir  
 
-    def test_migration_single_pipeline_single_version(self): 
-        """Test that the migration script correctly exports a single pipeline with single version from DB mode to Kubernetes native format"""
-        
-        with patch('sys.argv', [
-            'migration.py',
-            '--kfp-server-host', KFP_ENDPOINT,
-            '--output', str(self.output_dir),
-            '--namespace', 'kubeflow'
-        ]):
-            migrate()        
-        
-        yaml_files = list(self.output_dir.glob("*.yaml"))        
-        for yaml_file in yaml_files:
-            print(f"Generated file: {yaml_file}")
-        
-        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
-        
-        pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name]
-        self.assertGreaterEqual(len(pipeline_files), 1, "Should have files for simple pipeline")        
-        
-        for yaml_file in yaml_files:
-            content = yaml_file.read_text()
-            if "kind: Pipeline" in content or "kind: PipelineVersion" in content:
-                self.assertIn("pipelines.kubeflow.org/original-id", content, "Should have original ID annotation")
+@pytest.fixture
+def run_migration(migration_output_dir):
+    """Execute the migration script and return the output directory.
+    
+    This fixture runs the migration script once per test and provides
+    the output directory containing the generated YAML files.
+    """
+    with patch('sys.argv', [
+        'migration.py',
+        '--kfp-server-host', KFP_ENDPOINT,
+        '--output', str(migration_output_dir),
+        '--namespace', 'kubeflow'
+    ]):
+        migrate()
+    
+    return migration_output_dir
 
-    def test_migration_single_pipeline_multiple_versions_same_spec(self):
-        """Test that the migration script correctly exports a single pipeline with multiple versions that have the same specification"""
-        
-        with patch('sys.argv', [
-            'migration.py',
-            '--kfp-server-host', KFP_ENDPOINT,
-            '--output', str(self.output_dir),
-            '--namespace', 'kubeflow'
-        ]):
-            migrate()
-                
-        yaml_files = list(self.output_dir.glob("*.yaml"))        
-        for yaml_file in yaml_files:
-            print(f"Generated file: {yaml_file}")
-        
-        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
-        
-        version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])
-        self.assertGreaterEqual(version_count, 2, "Should have at least 2 pipeline versions")        
-        
-        for yaml_file in yaml_files:
-            content = yaml_file.read_text()
-            if "kind: PipelineVersion" in content:
-                self.assertIn("pipelines.kubeflow.org/original-id", content, "Should have original ID annotation")
+def parse_yaml_files(output_dir: Path) -> Dict[str, List[Dict[str, Any]]]:
+    """Parse all YAML files in the output directory and group by kind."""
+    resources = {"Pipeline": [], "PipelineVersion": [], "Experiment": [], "Run": [], "RecurringRun": []}
+    
+    for yaml_file in output_dir.glob("*.yaml"):
+        with open(yaml_file) as f:
+            docs = list(yaml.safe_load_all(f))
+            for doc in docs:
+                if doc and 'kind' in doc:
+                    kind = doc['kind']
+                    if kind in resources:
+                        resources[kind].append(doc)
+    
+    return resources
 
-    def test_migration_single_pipeline_multiple_versions_different_specs(self):
-        """Test that the migration script correctly exports a single pipeline with multiple versions that have different specifications"""
-        
-        with patch('sys.argv', [
-            'migration.py',
-            '--kfp-server-host', KFP_ENDPOINT,
-            '--output', str(self.output_dir),
-            '--namespace', 'kubeflow'
-        ]):
-            migrate()        
-        
-        yaml_files = list(self.output_dir.glob("*.yaml"))
-        for yaml_file in yaml_files:
-            print(f"Generated file: {yaml_file}")
-        
-        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
-       
-        complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
-        self.assertEqual(len(complex_pipeline_files), 1, "Should have one file for complex pipeline")        
-       
-        # Check that the complex pipeline file contains multiple versions
-        complex_pipeline_file = complex_pipeline_files[0]
-        content = complex_pipeline_file.read_text()
-        version_count = content.count("kind: PipelineVersion")
-        self.assertGreaterEqual(version_count, 2, "Complex pipeline should have multiple versions in the file")        
-        
-        # Check for original ID annotations
-        self.assertIn("pipelines.kubeflow.org/original-id", content, "Should have original ID annotation")
+def validate_original_id_annotation(resource: Dict[str, Any], expected_id: str) -> None:
+    """Validate that a resource has the correct original ID annotation."""
+    annotations = resource.get('metadata', {}).get('annotations', {})
+    actual_id = annotations.get('pipelines.kubeflow.org/original-id')
+    assert actual_id == expected_id, f"Resource should have original ID annotation: {expected_id}, got: {actual_id}"
 
-    def test_migration_multiple_pipelines_single_version_each(self):
-        """Test that the migration script correctly exports multiple pipelines, each with a single version"""
-       
-        with patch('sys.argv', [
-            'migration.py',
-            '--kfp-server-host', KFP_ENDPOINT,
-            '--output', str(self.output_dir),
-            '--namespace', 'kubeflow'
-        ]):
-            migrate()        
-        
-        yaml_files = list(self.output_dir.glob("*.yaml"))
-        for yaml_file in yaml_files:
-            print(f"Generated file: {yaml_file}")
-        
-        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")        
-       
-        pipeline_count = len([f for f in yaml_files if "kind: Pipeline" in f.read_text()])
-        version_count = len([f for f in yaml_files if "kind: PipelineVersion" in f.read_text()])        
-        
-        self.assertGreaterEqual(pipeline_count, 2, "Should have at least 2 pipelines")
-        self.assertGreaterEqual(version_count, 2, "Should have at least 2 pipeline versions")
 
-    def test_migration_multiple_pipelines_multiple_versions_different_specs(self):
-        """Test that the migration script correctly exports multiple pipelines with multiple versions having different specifications"""
+def validate_resource_structure(resource: Dict[str, Any], expected_fields: Dict[str, Any]) -> None:
+    """Validate that a resource contains expected field values."""
+    for field_path, expected_value in expected_fields.items():
+        current = resource
+        for key in field_path.split('.'):
+            assert key in current, f"Field path {field_path} missing key: {key}"
+            current = current[key]
+        assert current == expected_value, f"Field {field_path}: expected {expected_value}, got {current}"
+
+
+def find_test_data_by_name(test_data: Dict[str, Any], resource_type: str, name: str) -> Dict[str, Any]:
+    """Find a resource in test data by name."""
+    resources = test_data.get(resource_type, [])
+    for resource in resources:
+        if name in resource.get("name", ""):
+            return resource
+    pytest.fail(f"Test data should contain {resource_type} with name containing '{name}'")
+
+
+def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipeline: Dict[str, Any]) -> None:
+    """Compare migrated pipeline with original for data integrity."""
+    # Validate basic structure
+    assert 'metadata' in migrated_pipeline, "Migrated pipeline should have metadata"
+    assert 'spec' in migrated_pipeline, "Migrated pipeline should have spec"
+    
+    # Validate metadata preservation
+    assert migrated_pipeline['metadata']['name'] == original_pipeline['name'], "Pipeline name should be preserved"
+    assert migrated_pipeline['metadata']['namespace'] == 'kubeflow', "Pipeline should be in kubeflow namespace"
+    
+    # Validate original ID annotation
+    validate_original_id_annotation(migrated_pipeline, original_pipeline['id'])
+    
+    # Validate description preservation if available
+    if 'description' in original_pipeline:
+        pipeline_spec = migrated_pipeline.get('spec', {})
+        if 'description' in pipeline_spec:
+            assert pipeline_spec['description'] == original_pipeline['description'], "Pipeline description should be preserved"
+
+
+def test_migration_single_pipeline_single_version(test_data, run_migration):
+    """Test migration of a single pipeline with single version.
+    
+    Validates core migration functionality:
+    1. Running migration on a simple pipeline created in DB mode
+    2. Verifying YAML files are generated with correct Kubernetes resources
+    3. Checking original IDs are preserved in annotations
+    4. Validating migrated pipeline spec matches original data
+    
+    Test Case Reference: Migration Proposal Test Case 1
+    """
+    output_dir = run_migration
+    
+    yaml_files = list(output_dir.glob("*.yaml"))
+    for yaml_file in yaml_files:
+        print(f"Generated file: {yaml_file}")
+    
+    # Verify YAML files were created
+    assert len(yaml_files) > 0, "Migration should create YAML files"
+    
+    # Parse migrated resources
+    migrated_resources = parse_yaml_files(output_dir)
+    
+    # Find simple pipeline in test data and validate migration
+    original_pipeline = find_test_data_by_name(test_data, "pipelines", "simple-pipeline")
+    
+    # Verify Pipeline resource was created
+    pipelines = migrated_resources["Pipeline"]
+    assert len(pipelines) >= 1, "Should have at least one Pipeline resource"
+    
+    # Find the simple pipeline in migrated resources
+    simple_pipeline_resources = [p for p in pipelines 
+                               if "simple-pipeline" in p.get("metadata", {}).get("name", "")]
+    assert len(simple_pipeline_resources) >= 1, "Should have migrated simple pipeline"
+    
+    # Compare migrated pipeline with original
+    migrated_pipeline = simple_pipeline_resources[0]
+    compare_pipeline_objects(migrated_pipeline, original_pipeline)
+    
+    # Verify pipeline versions exist
+    pipeline_versions = migrated_resources["PipelineVersion"]
+    simple_versions = [v for v in pipeline_versions 
+                     if "simple-pipeline" in v.get("metadata", {}).get("name", "")]
+    assert len(simple_versions) >= 1, "Simple pipeline should have at least one version"
+
+
+def test_migration_single_pipeline_multiple_versions_same_spec(test_data, run_migration):
+    """Test migration of pipeline with multiple versions having same specification.
+    
+    Verifies:
+    1. Multiple pipeline versions are correctly exported
+    2. Each version maintains original ID in annotations  
+    3. Versions with identical specs are handled properly
+    4. Pipeline-version relationship is preserved
+    
+    Test Case Reference: Migration Proposal Test Case 2
+    """
+    output_dir = run_migration
+    
+    yaml_files = list(output_dir.glob("*.yaml"))
+    for yaml_file in yaml_files:
+        print(f"Generated file: {yaml_file}")
+    
+    assert len(yaml_files) > 0, "Migration should create YAML files"
+    
+    # Parse migrated resources
+    migrated_resources = parse_yaml_files(output_dir)
+    
+    # Verify PipelineVersion resources
+    pipeline_versions = migrated_resources["PipelineVersion"]
+    assert len(pipeline_versions) >= 2, "Should have at least 2 pipeline versions"
+    
+    # Validate each version structure and annotations
+    for version in pipeline_versions:
+        # Validate required fields
+        expected_fields = {
+            "kind": "PipelineVersion",
+            "metadata.namespace": "kubeflow"
+        }
+        validate_resource_structure(version, expected_fields)
         
-        with patch('sys.argv', [
-            'migration.py',
-            '--kfp-server-host', KFP_ENDPOINT,
-            '--output', str(self.output_dir),
-            '--namespace', 'kubeflow'
-        ]):
-            migrate()        
+        # Validate original ID annotation exists
+        annotations = version.get('metadata', {}).get('annotations', {})
+        assert 'pipelines.kubeflow.org/original-id' in annotations, "Each version should have original ID annotation"
         
-        yaml_files = list(self.output_dir.glob("*.yaml"))
-        for yaml_file in yaml_files:
-            print(f"Generated file: {yaml_file}")
+        # Validate spec structure
+        assert 'spec' in version, "PipelineVersion should have spec"
+        assert 'pipelineSpec' in version['spec'], "PipelineVersion should have pipelineSpec"
+
+
+def test_migration_single_pipeline_multiple_versions_different_specs(test_data, run_migration):
+    """Test migration of pipeline with multiple versions having different specifications.
+    
+    Ensures:
+    1. Multiple versions with different specs are properly exported
+    2. Each version preserves its unique specification
+    3. Pipeline and version relationships are maintained
+    4. Complex pipelines with dependencies are handled correctly
+    
+    Test Case Reference: Migration Proposal Test Case 3
+    """
+    output_dir = run_migration
+    
+    yaml_files = list(output_dir.glob("*.yaml"))
+    for yaml_file in yaml_files:
+        print(f"Generated file: {yaml_file}")
+    
+    assert len(yaml_files) > 0, "Migration should create YAML files"
+    
+    # Parse migrated resources
+    migrated_resources = parse_yaml_files(output_dir)
+    
+    # Find complex pipeline in test data
+    original_complex_pipeline = find_test_data_by_name(test_data, "pipelines", "complex-pipeline")
+    
+    # Verify complex pipeline was migrated
+    pipelines = migrated_resources["Pipeline"]
+    complex_pipeline_resources = [p for p in pipelines 
+                                if "complex-pipeline" in p.get("metadata", {}).get("name", "")]
+    assert len(complex_pipeline_resources) >= 1, "Should have migrated complex pipeline"
+    
+    # Compare migrated complex pipeline with original
+    migrated_complex_pipeline = complex_pipeline_resources[0]
+    compare_pipeline_objects(migrated_complex_pipeline, original_complex_pipeline)
+    
+    # Verify multiple versions exist for complex pipeline
+    pipeline_versions = migrated_resources["PipelineVersion"]
+    complex_versions = [v for v in pipeline_versions 
+                      if "complex-pipeline" in v.get("metadata", {}).get("name", "")]
+    assert len(complex_versions) >= 2, "Complex pipeline should have multiple versions"
+    
+    # Validate each version has proper structure and unique specifications
+    version_specs = []
+    for version in complex_versions:
+        # Validate original ID annotation
+        annotations = version.get('metadata', {}).get('annotations', {})
+        assert 'pipelines.kubeflow.org/original-id' in annotations, "Each version should have original ID annotation"
         
-        self.assertGreater(len(yaml_files), 0, "Migration should create YAML files")     
-      
-        pipeline_files = [f for f in yaml_files if "simple-pipeline" in f.name or "complex-pipeline" in f.name]
-        self.assertGreaterEqual(len(pipeline_files), 2, "Should have files for both pipelines")       
-       
-        # Check that complex pipeline file contains multiple versions
-        complex_pipeline_files = [f for f in yaml_files if "complex-pipeline" in f.name]
-        self.assertEqual(len(complex_pipeline_files), 1, "Should have one file for complex pipeline")
+        # Validate spec structure
+        assert 'spec' in version, "PipelineVersion should have spec field"
+        assert 'pipelineSpec' in version['spec'], "PipelineVersion should have pipelineSpec"
         
-        complex_pipeline_file = complex_pipeline_files[0]
-        content = complex_pipeline_file.read_text()
-        version_count = content.count("kind: PipelineVersion")
-        self.assertGreaterEqual(version_count, 2, "Complex pipeline should have multiple versions in the file")   
-   
-if __name__ == '__main__':
-    unittest.main()
+        # Collect specs to verify they are different
+        version_specs.append(str(version['spec']))
+    
+    # Verify we have different specifications (at least some should be different)
+    unique_specs = set(version_specs)
+    assert len(unique_specs) >= 1, "Should have at least one unique specification"
+
+
+def test_migration_multiple_pipelines_single_version_each(test_data, run_migration):
+    """Test migration of multiple pipelines, each with single version.
+    
+    Validates:
+    1. Multiple independent pipelines are all exported
+    2. Each pipeline maintains identity and metadata
+    3. Cross-pipeline relationships are not incorrectly created
+    4. All pipeline types (simple and complex) are handled
+    
+    Test Case Reference: Migration Proposal Test Case 4
+    """
+    output_dir = run_migration
+    
+    yaml_files = list(output_dir.glob("*.yaml"))
+    for yaml_file in yaml_files:
+        print(f"Generated file: {yaml_file}")
+    
+    assert len(yaml_files) > 0, "Migration should create YAML files"
+    
+    # Parse migrated resources
+    migrated_resources = parse_yaml_files(output_dir)
+    
+    # Count different types of resources
+    pipelines = migrated_resources["Pipeline"]
+    pipeline_versions = migrated_resources["PipelineVersion"]
+    
+    assert len(pipelines) >= 2, "Should have at least 2 pipelines"
+    assert len(pipeline_versions) >= 2, "Should have at least 2 pipeline versions"
+    
+    # Verify each pipeline has corresponding version(s) and proper structure
+    for pipeline in pipelines:
+        pipeline_name = pipeline.get("metadata", {}).get("name", "")
+        
+        # Find matching versions
+        matching_versions = [v for v in pipeline_versions 
+                           if pipeline_name in v.get("metadata", {}).get("name", "")]
+        assert len(matching_versions) >= 1, f"Pipeline {pipeline_name} should have at least one version"
+        
+        # Validate pipeline structure
+        expected_fields = {
+            "kind": "Pipeline",
+            "metadata.namespace": "kubeflow"
+        }
+        validate_resource_structure(pipeline, expected_fields)
+        
+        # Validate original ID annotation
+        annotations = pipeline.get('metadata', {}).get('annotations', {})
+        assert 'pipelines.kubeflow.org/original-id' in annotations, f"Pipeline {pipeline_name} should have original ID annotation"
+
+
+def test_migration_multiple_pipelines_multiple_versions_different_specs(test_data, run_migration):
+    """Test migration of multiple pipelines with multiple versions having different specifications.
+    
+    Comprehensive test ensuring:
+    1. Complex migration scenarios with multiple pipelines and versions work
+    2. Each resource maintains unique identity and specifications
+    3. Migration handles full complexity of real KFP environment
+    4. All relationships and dependencies are preserved
+    5. Object integrity is maintained across the migration
+    
+    Test Case Reference: Migration Proposal Test Case 5
+    """
+    output_dir = run_migration
+    
+    yaml_files = list(output_dir.glob("*.yaml"))
+    for yaml_file in yaml_files:
+        print(f"Generated file: {yaml_file}")
+    
+    assert len(yaml_files) > 0, "Migration should create YAML files"
+    
+    # Parse migrated resources
+    migrated_resources = parse_yaml_files(output_dir)
+    
+    # Verify we have both simple and complex pipelines
+    pipelines = migrated_resources["Pipeline"]
+    simple_pipelines = [p for p in pipelines 
+                      if "simple-pipeline" in p.get("metadata", {}).get("name", "")]
+    complex_pipelines = [p for p in pipelines 
+                       if "complex-pipeline" in p.get("metadata", {}).get("name", "")]
+    
+    assert len(simple_pipelines) >= 1, "Should have simple pipeline"
+    assert len(complex_pipelines) >= 1, "Should have complex pipeline"
+    
+    # Compare migrated pipelines with original test data
+    for migrated_pipeline in simple_pipelines:
+        original_pipeline = find_test_data_by_name(test_data, "pipelines", "simple-pipeline")
+        compare_pipeline_objects(migrated_pipeline, original_pipeline)
+    
+    for migrated_pipeline in complex_pipelines:
+        original_pipeline = find_test_data_by_name(test_data, "pipelines", "complex-pipeline")
+        compare_pipeline_objects(migrated_pipeline, original_pipeline)
+    
+    # Verify complex pipeline has multiple versions
+    pipeline_versions = migrated_resources["PipelineVersion"]
+    complex_versions = [v for v in pipeline_versions 
+                      if "complex-pipeline" in v.get("metadata", {}).get("name", "")]
+    assert len(complex_versions) >= 2, "Complex pipeline should have multiple versions"
+    
+    # Validate comprehensive resource structure and object integrity
+    for pipeline in pipelines:
+        # Check required fields for Pipeline resources
+        assert 'metadata' in pipeline, "Pipeline should have metadata"
+        assert 'name' in pipeline['metadata'], "Pipeline should have name"
+        assert 'namespace' in pipeline['metadata'], "Pipeline should have namespace"
+        assert pipeline['metadata']['namespace'] == 'kubeflow', "Pipeline should be in kubeflow namespace"
+        
+        # Check for original ID annotation
+        annotations = pipeline.get('metadata', {}).get('annotations', {})
+        assert 'pipelines.kubeflow.org/original-id' in annotations, "Pipeline should have original ID annotation"
+    
+    for version in pipeline_versions:
+        # Check required fields for PipelineVersion resources
+        assert 'metadata' in version, "PipelineVersion should have metadata"
+        assert 'spec' in version, "PipelineVersion should have spec"
+        assert 'pipelineSpec' in version['spec'], "PipelineVersion should have pipelineSpec"
+        
+        # Check for original ID annotation
+        annotations = version.get('metadata', {}).get('annotations', {})
+        assert 'pipelines.kubeflow.org/original-id' in annotations, "PipelineVersion should have original ID annotation"

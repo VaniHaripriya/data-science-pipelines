@@ -10,6 +10,11 @@ on:
       - ".github/resources/**"
       - "tools/k8s-native/**"
       - "test/kfp-kubernetes-native-migration-tests/**"
+      - "backend/src/apiserver/**"
+      - "backend/src/common/**"
+      - "api/v2alpha1/**"
+      - "api/v1beta1/**"
+      - "manifests/kustomize/**"
       - "!**/*.md"
       - "!**/OWNERS"
 
