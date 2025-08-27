@@ -110,14 +110,9 @@ def validate_pipeline_structure(pipeline_data: Dict[str, Any], expected_original
 def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     """Test that migrated pipelines are available and executable in K8s native mode.
     
-    This test verifies:
-    1. Migrated pipelines exist as Kubernetes Pipeline resources
-    2. Pipelines retain their original-id annotations
-    3. Pipelines can be discovered via KFP client API
-    4. Pipeline runs can be created and executed
-    5. Run details match expected structure and contain proper metadata
-    
-    This corresponds to the execution validation test in the migration proposal.
+    Validates migrated pipelines exist as Kubernetes Pipeline resources with original-id annotations.
+    Tests pipeline discovery via KFP client API and verifies runs can be created and executed.
+    Ensures run details match expected structure and contain proper metadata.
     """
     # Get migrated pipelines from Kubernetes
     migrated_pipelines = get_migrated_pipelines()
@@ -212,20 +207,14 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     # Validate that run is associated with correct experiment and pipeline
     run_experiment_id = getattr(run_details, 'experiment_id', None)
     assert run_experiment_id == experiment_id, "Run should be associated with correct experiment"
-    
-    print(f"Run details validation passed. Status: {getattr(run_details, 'status', 'UNKNOWN')}")
-
+   
 
 def test_k8s_mode_duplicate_pipeline_creation():
     """Test duplicate pipeline name handling in K8s native mode.
     
-    This test verifies:
-    1. Existing pipelines are properly managed in K8s native mode
-    2. Attempting to create duplicate pipeline names is handled correctly
-    3. Kubernetes resource uniqueness constraints work as expected
-    4. Pipeline resources maintain proper metadata and structure
-    
-    This corresponds to the resource conflict validation test in the migration proposal.
+    Validates existing pipelines are properly managed in K8s native mode.
+    Tests that attempting to create duplicate pipeline names is handled correctly.
+    Verifies Kubernetes resource uniqueness constraints work and pipelines maintain proper metadata.
     """
     pipeline_names = get_k8s_pipelines()
     assert len(pipeline_names) > 0, "Should have at least one pipeline in cluster"
@@ -258,45 +247,37 @@ def test_k8s_mode_duplicate_pipeline_creation():
         yaml.dump(duplicate_pipeline_data, f)
         temp_file = f.name
     
-    try:
-        result = subprocess.run([
-            'kubectl', 'apply', '-f', temp_file
-        ], capture_output=True, text=True)
-        
-        print(f"kubectl apply result: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}")
-        
-        # Verify pipeline still exists and is unique
-        updated_pipeline = get_pipeline_details(existing_pipeline_name)
-        
-        # Check that there's still only one pipeline with this name
-        all_pipelines = get_k8s_pipelines()
-        name_count = all_pipelines.count(existing_pipeline_name)
-        assert name_count == 1, f"Should have exactly 1 pipeline named {existing_pipeline_name}, but found {name_count}"
-        
-        # Verify the pipeline wasn't replaced (same UID and creation time)
-        assert updated_pipeline['metadata']['uid'] == original_uid, \
-            "Pipeline UID should remain the same (not replaced)"
-        assert updated_pipeline['metadata']['creationTimestamp'] == original_creation_time, \
-            "Pipeline creation time should remain the same (not replaced)"
-        
-        print(f"Duplicate pipeline handling works correctly - {existing_pipeline_name} remains unique")
-        
-    finally:
-        # Clean up temp file
-        os.unlink(temp_file)
-
+    result = subprocess.run([
+        'kubectl', 'apply', '-f', temp_file
+    ], capture_output=True, text=True)
+    
+    print(f"kubectl apply result: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}")
+    
+    # Verify pipeline still exists and is unique
+    updated_pipeline = get_pipeline_details(existing_pipeline_name)
+    
+    # Check that there's still only one pipeline with this name
+    all_pipelines = get_k8s_pipelines()
+    name_count = all_pipelines.count(existing_pipeline_name)
+    assert name_count == 1, f"Should have exactly 1 pipeline named {existing_pipeline_name}, but found {name_count}"
+    
+    # Verify the pipeline wasn't replaced
+    assert updated_pipeline['metadata']['uid'] == original_uid, \
+        "Pipeline UID should remain the same (not replaced)"
+    assert updated_pipeline['metadata']['creationTimestamp'] == original_creation_time, \
+        "Pipeline creation time should remain the same (not replaced)"
+    
+    print(f"Duplicate pipeline handling works correctly - {existing_pipeline_name} remains unique")
+    
+    # Clean up temp file
+    os.unlink(temp_file)
 
 def test_k8s_mode_experiment_creation(kfp_client, test_data):
     """Test experiment and run creation in K8s native mode after migration.
     
-    This test validates:
-    1. New experiments can be created in K8s native mode
-    2. Experiments have proper structure and metadata
-    3. Runs can be created against migrated pipelines
-    4. Run metadata matches expected format from original test data
-    5. The complete experiment/pipeline/run relationship works end-to-end
-    
-    This corresponds to the new resource creation test in the migration proposal.
+    Validates new experiments can be created in K8s native mode with proper structure and metadata.
+    Tests runs can be created against migrated pipelines.
+    Verifies complete experiment/pipeline/run relationship works end-to-end.
     """
     # Create experiment
     experiment = kfp_client.create_experiment(
@@ -370,31 +351,17 @@ def test_k8s_mode_experiment_creation(kfp_client, test_data):
         original_run = test_data["runs"][0]
         original_structure_keys = set(original_run.keys())
         new_structure_keys = set(expected_run_structure.keys())
-        
-        # Verify we have essential keys for run functionality
-        # Note: K8s native mode and database mode have different structures,
-        # but both should have the core run identification and pipeline reference
+       
         essential_keys = {"id", "name", "pipeline_spec"}
         assert essential_keys.issubset(new_structure_keys), \
             f"Run should have essential keys: {essential_keys}. Got: {new_structure_keys}"
         
-        # Log the structural differences for information
-        print(f"Original DB mode run structure: {sorted(original_structure_keys)}")
-        print(f"New K8s mode run structure: {sorted(new_structure_keys)}")
-        print("Run structure validation passed - essential run functionality confirmed")
-
-
 def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     """Test recurring run continuity after migration to K8s native mode.
     
-    This test ensures:
-    1. Recurring runs created in database mode still exist in K8s native mode
-    2. Recurring run metadata (name, ID, schedule) is preserved
-    3. Cron schedules are maintained correctly
-    4. The recurring run structure matches original test data format
-    5. API endpoints continue to work for existing recurring runs
-    
-    This corresponds to the data continuity validation test in the migration proposal.
+    Validates recurring runs created in database mode still exist in K8s native mode.
+    Tests recurring run metadata (name, ID, schedule) is preserved with correct cron schedules.
+    Verifies API endpoints continue to work for existing recurring runs.
     """
     assert test_data.get("recurring_runs"), "Test data should contain recurring runs for validation"
     
@@ -447,5 +414,3 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
             field_exists = (field in current_structure_keys or 
                           any(field in k for k in current_structure_keys))
             assert field_exists, f"Key field {field} should be preserved in recurring run structure"
-    
-    print(f"Recurring run continuity validation passed - all metadata preserved")
