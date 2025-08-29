@@ -282,12 +282,17 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     assert version_id is not None, "Pipeline version should have an ID"
     
     # Create and execute a run
+    # Provide default parameters for pipelines that require them
+    test_params = {}
+    if 'add-numbers' in first_pipeline_name:
+        test_params = {'a': 5, 'b': 3}
+    
     run_data = kfp_client.run_pipeline(
         experiment_id=experiment_id,
         job_name="k8s-execution-test-run",
         pipeline_id=pipeline_id,
         version_id=version_id,
-        params={}
+        params=test_params
     )
     
     run_id = getattr(run_data, 'run_id', None)
