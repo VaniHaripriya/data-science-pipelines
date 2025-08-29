@@ -282,7 +282,9 @@ def test_migration_single_pipeline_single_version(test_data, run_migration):
         original_version_id = annotations.get('pipelines.kubeflow.org/original-id')
         original_version = None
         for original in test_data.get('pipelines', []):
-            if original.get('id') == original_version_id:
+            # Handle KFP client objects vs dict structures
+            original_id = getattr(original, 'pipeline_version_id', None) or getattr(original, 'pipeline_id', None) or (original.get('id', None) if hasattr(original, 'get') else None)
+            if original_id == original_version_id:
                 original_version = original
                 break
         
@@ -379,9 +381,12 @@ def test_migration_single_pipeline_multiple_versions_different_specs(test_data, 
         # Enhanced comparison with complete object data
         original_version = None
         for original in test_data.get('pipelines', []):
-            if ('pipeline_id' in original and 
-                original.get('name') and 
-                'add-numbers' in original.get('name', '')):
+            # Handle KFP client objects vs dict structures
+            has_pipeline_id = hasattr(original, 'pipeline_id') or (hasattr(original, 'get') and 'pipeline_id' in original)
+            original_name = getattr(original, 'display_name', None) or getattr(original, 'name', None) or (original.get('name', '') if hasattr(original, 'get') else '')
+            if (has_pipeline_id and 
+                original_name and 
+                'add-numbers' in original_name):
                 original_version = original
                 break
         
@@ -490,7 +495,9 @@ def test_migration_multiple_pipelines_multiple_versions_different_specs(test_dat
         original_pipeline_id = annotations.get('pipelines.kubeflow.org/original-id')
         original_pipeline = None
         for original in test_data.get('pipelines', []):
-            if original.get('id') == original_pipeline_id:
+            # Handle KFP client objects vs dict structures
+            original_id = getattr(original, 'pipeline_id', None) or (original.get('id', None) if hasattr(original, 'get') else None)
+            if original_id == original_pipeline_id:
                 original_pipeline = original
                 break
         
@@ -511,7 +518,9 @@ def test_migration_multiple_pipelines_multiple_versions_different_specs(test_dat
         original_version_id = annotations.get('pipelines.kubeflow.org/original-id')
         original_version = None
         for original in test_data.get('pipelines', []):
-            if original.get('id') == original_version_id:
+            # Handle KFP client objects vs dict structures
+            original_id = getattr(original, 'pipeline_version_id', None) or getattr(original, 'pipeline_id', None) or (original.get('id', None) if hasattr(original, 'get') else None)
+            if original_id == original_version_id:
                 original_version = original
                 break
         
