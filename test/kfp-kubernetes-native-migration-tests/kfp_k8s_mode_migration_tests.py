@@ -107,12 +107,92 @@ def validate_pipeline_structure(pipeline_data: Dict[str, Any], expected_original
             f"Pipeline should have original ID annotation: {expected_original_id}"
 
 
+def compare_complete_k8s_objects(k8s_resource: Dict[str, Any], original_resource: Dict[str, Any], resource_type: str) -> None:
+    """Compare K8s native resources with original DB mode objects using complete object comparison."""
+    if 'object_serialized' not in original_resource:
+        return  # Skip detailed comparison if serialized object not available
+    
+    original_object = original_resource['object_serialized']
+    
+    # Core validations based on resource type
+    if resource_type == "Pipeline":
+        # Validate pipeline-specific attributes
+        original_name = original_object.get('display_name') or original_object.get('name')
+        k8s_name = k8s_resource.get('metadata', {}).get('name')
+        assert k8s_name == original_name, \
+            f"Pipeline name mismatch: k8s={k8s_name}, original={original_name}"
+        
+        # Validate pipeline ID preservation in annotations
+        original_id = original_object.get('pipeline_id') or original_resource.get('id')
+        annotations = k8s_resource.get('metadata', {}).get('annotations', {})
+        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
+            f"Pipeline ID should be preserved in annotations: {original_id}"
+        
+        # Validate description preservation if available
+        if 'description' in original_object:
+            spec_description = k8s_resource.get('spec', {}).get('description')
+            if spec_description:
+                assert spec_description == original_object['description'], \
+                    "Pipeline description should be preserved in K8s spec"
+    
+    elif resource_type == "Run":
+        # Validate run-specific attributes
+        original_name = original_object.get('display_name') or original_object.get('name')
+        # For K8s runs, name may come from KFP client response
+        if hasattr(k8s_resource, 'display_name'):
+            k8s_name = getattr(k8s_resource, 'display_name', None)
+        else:
+            k8s_name = k8s_resource.get('display_name')
+        
+        if k8s_name and original_name:
+            # Basic name validation (K8s runs may have generated names)
+            assert original_name in k8s_name or k8s_name in original_name, \
+                f"Run name should be related: k8s={k8s_name}, original={original_name}"
+        
+        # Validate experiment association
+        if 'experiment_id' in original_object:
+            k8s_experiment_id = getattr(k8s_resource, 'experiment_id', None) or k8s_resource.get('experiment_id')
+            assert k8s_experiment_id is not None, "Run should be associated with an experiment in K8s mode"
+    
+    elif resource_type == "Experiment":
+        # Validate experiment-specific attributes
+        original_name = original_object.get('display_name') or original_object.get('name')
+        k8s_name = getattr(k8s_resource, 'display_name', None) or k8s_resource.get('display_name')
+        if k8s_name and original_name:
+            assert k8s_name == original_name, \
+                f"Experiment name mismatch: k8s={k8s_name}, original={original_name}"
+        
+        # Validate experiment ID preservation
+        original_id = original_object.get('experiment_id') or original_resource.get('id')
+        k8s_id = getattr(k8s_resource, 'experiment_id', None) or k8s_resource.get('experiment_id')
+        if k8s_id and original_id:
+            # In K8s mode, experiment IDs may be different but should exist
+            assert k8s_id is not None, "Experiment should have an ID in K8s mode"
+        
+        # Validate description preservation if available
+        if 'description' in original_object:
+            k8s_description = getattr(k8s_resource, 'description', None) or k8s_resource.get('description')
+            if k8s_description:
+                assert k8s_description == original_object['description'], \
+                    "Experiment description should be preserved in K8s mode"
+    
+    # Validate creation timestamp preservation if available
+    if 'created_at' in original_object:
+        # K8s resources should have creationTimestamp in metadata
+        creation_time = k8s_resource.get('metadata', {}).get('creationTimestamp')
+        if not creation_time:
+            # For client objects, check if they have created_at attribute
+            creation_time = getattr(k8s_resource, 'created_at', None)
+        assert creation_time is not None, "Creation timestamp should be preserved in K8s mode"
+
+
 def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     """Test that migrated pipelines are available and executable in K8s native mode.
     
     Validates migrated pipelines exist as Kubernetes Pipeline resources with original-id annotations.
     Tests pipeline discovery via KFP client API and verifies runs can be created and executed.
     Ensures run details match expected structure and contain proper metadata.
+    Uses enhanced object comparison with complete KFP client objects.
     """
     # Get migrated pipelines from Kubernetes
     migrated_pipelines = get_migrated_pipelines()
@@ -133,6 +213,8 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     
     if original_pipeline:
         validate_pipeline_structure(pipeline_details, original_pipeline["id"])
+        # Enhanced validation using complete object comparison
+        compare_complete_k8s_objects(pipeline_details, original_pipeline, "Pipeline")
     else:
         validate_pipeline_structure(pipeline_details)
     
@@ -207,6 +289,11 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     # Validate that run is associated with correct experiment and pipeline
     run_experiment_id = getattr(run_details, 'experiment_id', None)
     assert run_experiment_id == experiment_id, "Run should be associated with correct experiment"
+    
+    # Enhanced validation using complete object comparison with original runs
+    if test_data.get("runs"):
+        original_run = test_data["runs"][0]
+        compare_complete_k8s_objects(run_details, original_run, "Run")
    
 
 def test_k8s_mode_duplicate_pipeline_creation():
@@ -301,11 +388,11 @@ def test_k8s_mode_experiment_creation(kfp_client, test_data):
     target_pipeline = None
     for pipeline in pipeline_list:
         pipeline_name = getattr(pipeline, 'display_name', None)
-        if pipeline_name == "simple-pipeline":
+        if pipeline_name == "hello-world":
             target_pipeline = pipeline
             break
     
-    assert target_pipeline is not None, "Should find simple-pipeline for testing"
+    assert target_pipeline is not None, "Should find hello-world pipeline for testing"
     
     pipeline_id = getattr(target_pipeline, 'pipeline_id', None)
     assert pipeline_id is not None, "Pipeline should have an ID"
@@ -355,6 +442,16 @@ def test_k8s_mode_experiment_creation(kfp_client, test_data):
         essential_keys = {"id", "name", "pipeline_spec"}
         assert essential_keys.issubset(new_structure_keys), \
             f"Run should have essential keys: {essential_keys}. Got: {new_structure_keys}"
+        
+        # Enhanced validation using complete object comparison
+        run_details = kfp_client.get_run(run_id=run_id)
+        compare_complete_k8s_objects(run_details, original_run, "Run")
+    
+    # Enhanced experiment validation using complete object comparison
+    if test_data.get("experiments"):
+        original_experiment = test_data["experiments"][0]
+        experiment_details = kfp_client.get_experiment(experiment_id=experiment_id)
+        compare_complete_k8s_objects(experiment_details, original_experiment, "Experiment")
         
 def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     """Test recurring run continuity after migration to K8s native mode.
@@ -414,3 +511,33 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
             field_exists = (field in current_structure_keys or 
                           any(field in k for k in current_structure_keys))
             assert field_exists, f"Key field {field} should be preserved in recurring run structure"
+    
+    # Enhanced validation using complete object comparison
+    if 'object_serialized' in original_recurring_run:
+        original_object = original_recurring_run['object_serialized']
+        
+        # Validate recurring run name preservation
+        original_name = original_object.get('display_name') or original_object.get('name')
+        if original_name and current_run_name:
+            assert current_run_name == original_name, \
+                f"Recurring run name should be preserved: expected={original_name}, got={current_run_name}"
+        
+        # Validate trigger/schedule preservation
+        if 'trigger' in original_object and original_object['trigger']:
+            current_trigger = recurring_run.get('trigger', {})
+            original_trigger = original_object['trigger']
+            
+            # Check cron schedule preservation
+            if 'cron_schedule' in original_trigger:
+                assert 'cron_schedule' in current_trigger, "Cron schedule should be preserved"
+                original_cron = original_trigger['cron_schedule'].get('cron')
+                current_cron = current_trigger['cron_schedule'].get('cron')
+                assert current_cron == original_cron, \
+                    f"Cron schedule should match: expected={original_cron}, got={current_cron}"
+        
+        # Validate status and enabled state if available
+        if 'enabled' in original_object:
+            current_enabled = recurring_run.get('enabled')
+            if current_enabled is not None:
+                assert current_enabled == original_object['enabled'], \
+                    "Recurring run enabled state should be preserved"

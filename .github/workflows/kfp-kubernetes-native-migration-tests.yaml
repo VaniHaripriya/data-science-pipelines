@@ -10,6 +10,7 @@ on:
       - ".github/resources/**"
       - "tools/k8s-native/**"
       - "test/kfp-kubernetes-native-migration-tests/**"
+      - "test_data/pipeline_files/valid/**"
       - "backend/src/apiserver/**"
       - "backend/src/common/**"
       - "api/v2alpha1/**"
@@ -81,10 +82,21 @@ jobs:
         if: ${{ steps.install-kfp-k8s-deps.outcome == 'success' }}
         run: pip install -r ./test/kfp-kubernetes-native-migration-tests/requirements.txt
 
-      - name: Create test pipelines in DB mode
+      - name: Verify test pipeline files exist
         if: ${{ steps.install-requirements.outcome == 'success' }}
+        id: verify-pipeline-files
+        run: |
+          echo "Verifying required pipeline files exist..."
+          ls -la test_data/pipeline_files/valid/critical/hello-world.yaml
+          ls -la test_data/pipeline_files/valid/add_numbers.yaml
+          echo "Pipeline files verified successfully."
+
+      - name: Create test pipelines in DB mode
+        if: ${{ steps.verify-pipeline-files.outcome == 'success' }}
         id: create-test-pipelines
-        run: python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
+        run: |
+          echo "Creating test pipelines using existing pipeline files..."
+          python ./test/kfp-kubernetes-native-migration-tests/create_test_pipelines.py
         continue-on-error: true
 
       - name: Run DB mode migration tests
