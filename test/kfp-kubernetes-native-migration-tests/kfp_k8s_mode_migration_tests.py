@@ -22,6 +22,7 @@ They test the end-to-end migration flow from database mode to K8s native mode.
 
 import json
 import os
+import pickle
 import tempfile
 import subprocess
 import requests
@@ -51,10 +52,10 @@ def api_base():
 @pytest.fixture(scope="session")
 def test_data():
     """Load test data created in database mode before migration."""
-    test_data_file = Path("migration_test_data.json")
+    test_data_file = Path("migration_test_data.pkl")
     if test_data_file.exists():
-        with open(test_data_file) as f:
-            return json.load(f)
+        with open(test_data_file, "rb") as f:
+            return pickle.load(f)
     else:
         return {"pipelines": [], "experiments": [], "runs": [], "recurring_runs": []}
 

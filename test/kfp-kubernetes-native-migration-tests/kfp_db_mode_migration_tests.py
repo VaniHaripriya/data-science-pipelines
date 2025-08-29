@@ -21,6 +21,7 @@ to Kubernetes native format
 
 import json
 import os
+import pickle
 import sys
 import subprocess
 import requests
@@ -47,10 +48,10 @@ def test_data():
     """Load test data created by create_test_pipelines.py.
     
     """
-    test_data_file = Path("migration_test_data.json")
+    test_data_file = Path("migration_test_data.pkl")
     if test_data_file.exists():
-        with open(test_data_file) as f:
-            return json.load(f)
+        with open(test_data_file, "rb") as f:
+            return pickle.load(f)
     else:
         pytest.skip("Test data file not found. Run create_test_pipelines.py first when KFP server is available.")
 

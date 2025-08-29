@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import json
+import pickle
 import time
 import requests
 import subprocess
@@ -264,10 +265,21 @@ def main():
     test_data["recurring_runs"].append(recurring_run)
     print(f"Created recurring run: {recurring_run.display_name} (ID: {recurring_run.recurring_run_id})")
 
-    # Save test data for later use
-    migration_test_data_file = Path("migration_test_data.json")
-    with open(migration_test_data_file, "w") as f:
-        json.dump(test_data, f, indent=2)
+    # Save test data for later use (using pickle for KFP objects)
+    migration_test_data_file = Path("migration_test_data.pkl")
+    with open(migration_test_data_file, "wb") as f:
+        pickle.dump(test_data, f)
+    
+    # Also save a JSON version with serialized data for debugging
+    migration_test_data_json = Path("migration_test_data.json")
+    json_data = {
+        "pipelines": [serialize_object_for_comparison(obj) for obj in test_data["pipelines"]],
+        "experiments": [serialize_object_for_comparison(obj) for obj in test_data["experiments"]],
+        "runs": [serialize_object_for_comparison(obj) for obj in test_data["runs"]],
+        "recurring_runs": [serialize_object_for_comparison(obj) for obj in test_data["recurring_runs"]]
+    }
+    with open(migration_test_data_json, "w") as f:
+        json.dump(json_data, f, indent=2, default=str)
 
     print(f"\nTest data saved to {migration_test_data_file}")
     print("Test environment setup complete!")    
