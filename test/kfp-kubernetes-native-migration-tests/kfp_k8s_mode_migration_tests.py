@@ -26,7 +26,7 @@ import pickle
 import tempfile
 import subprocess
 import requests
-import kfp
+from kfp.client import Client
 import pytest
 import yaml
 from pathlib import Path
@@ -40,7 +40,7 @@ KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 @pytest.fixture(scope="session")
 def kfp_client():
     """Create a KFP client for testing K8s native mode."""
-    return kfp.Client(host=KFP_ENDPOINT)
+    return Client(host=KFP_ENDPOINT)
 
 
 @pytest.fixture(scope="session")
@@ -176,27 +176,27 @@ def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type:
         
         # Validate experiment association
         if 'experiment_id' in original_object:
-            k8s_experiment_id = getattr(k8s_resource, 'experiment_id', None) or k8s_resource.get('experiment_id')
+            k8s_experiment_id = getattr(k8s_resource, 'experiment_id', None) or (k8s_resource.get('experiment_id') if hasattr(k8s_resource, 'get') else None)
             assert k8s_experiment_id is not None, "Run should be associated with an experiment in K8s mode"
     
     elif resource_type == "Experiment":
         # Validate experiment-specific attributes
         original_name = original_object.get('display_name') or original_object.get('name')
-        k8s_name = getattr(k8s_resource, 'display_name', None) or k8s_resource.get('display_name')
+        k8s_name = getattr(k8s_resource, 'display_name', None) or (k8s_resource.get('display_name') if hasattr(k8s_resource, 'get') else None)
         if k8s_name and original_name:
             assert k8s_name == original_name, \
                 f"Experiment name mismatch: k8s={k8s_name}, original={original_name}"
         
         # Validate experiment ID preservation
         original_id = original_object.get('experiment_id') or getattr(original_resource, 'experiment_id', None)
-        k8s_id = getattr(k8s_resource, 'experiment_id', None) or k8s_resource.get('experiment_id')
+        k8s_id = getattr(k8s_resource, 'experiment_id', None) or (k8s_resource.get('experiment_id') if hasattr(k8s_resource, 'get') else None)
         if k8s_id and original_id:
             # In K8s mode, experiment IDs may be different but should exist
             assert k8s_id is not None, "Experiment should have an ID in K8s mode"
         
         # Validate description preservation if available
         if 'description' in original_object:
-            k8s_description = getattr(k8s_resource, 'description', None) or k8s_resource.get('description')
+            k8s_description = getattr(k8s_resource, 'description', None) or (k8s_resource.get('description') if hasattr(k8s_resource, 'get') else None)
             if k8s_description:
                 assert k8s_description == original_object['description'], \
                     "Experiment description should be preserved in K8s mode"
@@ -234,14 +234,14 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     original_pipeline = None
     for pipeline in test_data.get("pipelines", []):
         # Handle both KFP client objects and dict structures
-        pipeline_name = getattr(pipeline, 'display_name', None) or getattr(pipeline, 'name', None) or pipeline.get("name", "")
+        pipeline_name = getattr(pipeline, 'display_name', None) or getattr(pipeline, 'name', None) or (pipeline.get("name", "") if hasattr(pipeline, 'get') else "")
         if pipeline_name == first_pipeline_name:
             original_pipeline = pipeline
             break
     
     if original_pipeline:
         # Get pipeline ID from KFP client object or dict
-        original_id = getattr(original_pipeline, 'pipeline_id', None) or original_pipeline.get("id", "")
+        original_id = getattr(original_pipeline, 'pipeline_id', None) or (original_pipeline.get("id", "") if hasattr(original_pipeline, 'get') else "")
         validate_pipeline_structure(pipeline_details, original_id)
         # Enhanced validation using complete object comparison
         compare_complete_k8s_objects(pipeline_details, original_pipeline, "Pipeline")
@@ -508,12 +508,12 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     recurring_run = response.json()
     
     # Extract current run details
-    current_run_name = getattr(recurring_run, 'display_name', 
-                              recurring_run.get('display_name', 
-                                               recurring_run.get('name')))
-    current_run_id = getattr(recurring_run, 'recurring_run_id', 
-                           recurring_run.get('recurring_run_id', 
-                                            recurring_run.get('id')))
+    current_run_name = getattr(recurring_run, 'display_name', None) or (
+                              recurring_run.get('display_name') if hasattr(recurring_run, 'get') else None) or (
+                              recurring_run.get('name') if hasattr(recurring_run, 'get') else None)
+    current_run_id = getattr(recurring_run, 'recurring_run_id', None) or (
+                           recurring_run.get('recurring_run_id') if hasattr(recurring_run, 'get') else None) or (
+                           recurring_run.get('id') if hasattr(recurring_run, 'get') else None)
     
     print(f"Recurring run found in K8s mode: {current_run_name} (ID: {current_run_id})")
     
@@ -524,8 +524,8 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
         f"Recurring run ID should be preserved: expected {recurring_run_id}, got {current_run_id}"
     
     # Validate cron schedule preservation
-    original_cron = original_recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron')
-    current_cron = recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron')
+    original_cron = (original_recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron') if hasattr(original_recurring_run, 'get') else None)
+    current_cron = (recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron') if hasattr(recurring_run, 'get') else None)
     
     assert current_cron == original_cron, \
         f"Cron schedule should be preserved: expected {original_cron}, got {current_cron}"
@@ -566,14 +566,14 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
         # Check cron schedule preservation
         if 'cron_schedule' in original_trigger:
             assert 'cron_schedule' in current_trigger, "Cron schedule should be preserved"
-            original_cron = original_trigger['cron_schedule'].get('cron')
-            current_cron = current_trigger['cron_schedule'].get('cron')
+            original_cron = original_trigger['cron_schedule'].get('cron') if hasattr(original_trigger['cron_schedule'], 'get') else None
+            current_cron = current_trigger['cron_schedule'].get('cron') if hasattr(current_trigger['cron_schedule'], 'get') else None
             assert current_cron == original_cron, \
                 f"Cron schedule should match: expected={original_cron}, got={current_cron}"
     
     # Validate status and enabled state if available
     if 'enabled' in original_object:
-        current_enabled = recurring_run.get('enabled')
+        current_enabled = recurring_run.get('enabled') if hasattr(recurring_run, 'get') else None
         if current_enabled is not None:
             assert current_enabled == original_object['enabled'], \
                 "Recurring run enabled state should be preserved"
