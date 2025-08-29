@@ -285,8 +285,12 @@ def main():
     print("Test environment setup complete!")    
 
     print(f"\nCreated:")
-    print(f"- {len([p for p in test_data['pipelines'] if 'pipeline_id' not in p])} pipelines")
-    print(f"- {len([p for p in test_data['pipelines'] if 'pipeline_id' in p])} pipeline versions")
+    # Count pipelines (have pipeline_id but not pipeline_version_id)
+    pipelines = [p for p in test_data['pipelines'] if hasattr(p, 'pipeline_id') and not hasattr(p, 'pipeline_version_id')]
+    # Count pipeline versions (have both pipeline_id and pipeline_version_id)
+    versions = [p for p in test_data['pipelines'] if hasattr(p, 'pipeline_version_id')]
+    print(f"- {len(pipelines)} pipelines")
+    print(f"- {len(versions)} pipeline versions")
     print(f"- {len(test_data['experiments'])} experiments")
     print(f"- {len(test_data['runs'])} runs")
     print(f"- {len(test_data['recurring_runs'])} recurring runs")
