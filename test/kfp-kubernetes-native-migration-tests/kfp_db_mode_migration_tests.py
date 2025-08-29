@@ -176,6 +176,41 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
             assert 'spec' in migrated_resource, "Migrated pipeline version should have spec"
             assert 'pipelineSpec' in migrated_resource['spec'], "Should have pipelineSpec in spec"
     
+    elif resource_type == "Experiment":
+        # Validate experiment-specific attributes
+        original_name = original_object.get('display_name') or original_object.get('name')
+        migrated_name = migrated_resource.get('metadata', {}).get('name')
+        assert migrated_name == original_name, \
+            f"Experiment name mismatch: migrated={migrated_name}, original={original_name}"
+        
+        # Validate experiment ID preservation in annotations
+        original_id = original_object.get('experiment_id') or getattr(original_resource, 'experiment_id', None)
+        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
+        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
+            f"Experiment ID should be preserved in annotations: {original_id}"
+    
+    elif resource_type == "Run":
+        # Validate run-specific attributes
+        original_name = original_object.get('display_name') or original_object.get('name')
+        migrated_name = migrated_resource.get('metadata', {}).get('name')
+        
+        # Validate run ID preservation in annotations
+        original_id = original_object.get('run_id') or getattr(original_resource, 'run_id', None)
+        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
+        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
+            f"Run ID should be preserved in annotations: {original_id}"
+    
+    elif resource_type == "RecurringRun":
+        # Validate recurring run-specific attributes
+        original_name = original_object.get('display_name') or original_object.get('name')
+        migrated_name = migrated_resource.get('metadata', {}).get('name')
+        
+        # Validate recurring run ID preservation in annotations
+        original_id = original_object.get('recurring_run_id') or getattr(original_resource, 'recurring_run_id', None)
+        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
+        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
+            f"Recurring run ID should be preserved in annotations: {original_id}"
+    
     # Validate creation timestamp preservation if available (optional)
     if 'created_at' in original_object:
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
@@ -192,8 +227,8 @@ def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipelin
     assert 'spec' in migrated_pipeline, "Migrated pipeline should have spec"
     
     # Get pipeline name and ID from KFP client object or dict
-    original_name = getattr(original_pipeline, 'display_name', None) or getattr(original_pipeline, 'name', None) or original_pipeline.get('name', '')
-    original_id = getattr(original_pipeline, 'pipeline_id', None) or original_pipeline.get('id', '')
+    original_name = getattr(original_pipeline, 'display_name', None) or getattr(original_pipeline, 'name', None) or (original_pipeline.get('name', '') if hasattr(original_pipeline, 'get') else '')
+    original_id = getattr(original_pipeline, 'pipeline_id', None) or (original_pipeline.get('id', '') if hasattr(original_pipeline, 'get') else '')
     
     # Validate metadata preservation
     assert migrated_pipeline['metadata']['name'] == original_name, "Pipeline name should be preserved"
@@ -203,7 +238,7 @@ def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipelin
     validate_original_id_annotation(migrated_pipeline, original_id)
     
     # Validate description preservation if available
-    original_description = getattr(original_pipeline, 'description', None) or original_pipeline.get('description', '')
+    original_description = getattr(original_pipeline, 'description', None) or (original_pipeline.get('description', '') if hasattr(original_pipeline, 'get') else '')
     if original_description:
         pipeline_spec = migrated_pipeline.get('spec', {})
         if 'description' in pipeline_spec:
@@ -381,10 +416,12 @@ def test_migration_single_pipeline_multiple_versions_different_specs(test_data, 
         # Enhanced comparison with complete object data
         original_version = None
         for original in test_data.get('pipelines', []):
-            # Handle KFP client objects vs dict structures
+            # Handle KFP client objects vs dict structures - look specifically for pipeline versions
+            has_version_id = hasattr(original, 'pipeline_version_id') or (hasattr(original, 'get') and 'pipeline_version_id' in original)
             has_pipeline_id = hasattr(original, 'pipeline_id') or (hasattr(original, 'get') and 'pipeline_id' in original)
             original_name = getattr(original, 'display_name', None) or getattr(original, 'name', None) or (original.get('name', '') if hasattr(original, 'get') else '')
-            if (has_pipeline_id and 
+            # Only match objects that are pipeline versions (have pipeline_version_id) and belong to add-numbers pipeline
+            if (has_version_id and has_pipeline_id and 
                 original_name and 
                 'add-numbers' in original_name):
                 original_version = original
