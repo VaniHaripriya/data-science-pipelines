@@ -258,7 +258,7 @@ def main():
         version2.pipeline_version_id,
         "test-add-numbers-recurring-run",
         "0 0 * * *",  
-        parameters=[{"name": "a", "value": "5"}, {"name": "b", "value": "3"}]
+        parameters=[{"name": "a", "value": 5}, {"name": "b", "value": 3}]
     )
     # Store the complete recurring run object directly
     test_data["recurring_runs"].append(recurring_run)
