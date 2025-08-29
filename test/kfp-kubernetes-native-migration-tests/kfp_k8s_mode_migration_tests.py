@@ -107,12 +107,36 @@ def validate_pipeline_structure(pipeline_data: Dict[str, Any], expected_original
             f"Pipeline should have original ID annotation: {expected_original_id}"
 
 
-def compare_complete_k8s_objects(k8s_resource: Dict[str, Any], original_resource: Dict[str, Any], resource_type: str) -> None:
+def serialize_object_for_comparison(obj):
+    """Serialize KFP objects to JSON-serializable format for comparison."""
+    if hasattr(obj, 'to_dict'):
+        return obj.to_dict()
+    elif hasattr(obj, '__dict__'):
+        # Convert object attributes to dict, handling nested objects
+        result = {}
+        for key, value in obj.__dict__.items():
+            if hasattr(value, 'to_dict'):
+                result[key] = value.to_dict()
+            elif hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, type(None))):
+                result[key] = serialize_object_for_comparison(value)
+            else:
+                result[key] = value
+        return result
+    else:
+        return str(obj)
+
+
+def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type: str) -> None:
     """Compare K8s native resources with original DB mode objects using complete object comparison."""
-    if 'object_serialized' not in original_resource:
-        return  # Skip detailed comparison if serialized object not available
-    
-    original_object = original_resource['object_serialized']
+    # Handle both KFP client objects and dict structures
+    if hasattr(original_resource, '__dict__'):
+        # This is a KFP client object, serialize it for comparison
+        original_object = serialize_object_for_comparison(original_resource)
+    elif isinstance(original_resource, dict) and 'object_serialized' in original_resource:
+        # This is the old dict structure
+        original_object = original_resource['object_serialized']
+    else:
+        return  # Skip detailed comparison if object not available
     
     # Core validations based on resource type
     if resource_type == "Pipeline":
@@ -123,7 +147,7 @@ def compare_complete_k8s_objects(k8s_resource: Dict[str, Any], original_resource
             f"Pipeline name mismatch: k8s={k8s_name}, original={original_name}"
         
         # Validate pipeline ID preservation in annotations
-        original_id = original_object.get('pipeline_id') or original_resource.get('id')
+        original_id = original_object.get('pipeline_id') or getattr(original_resource, 'pipeline_id', None)
         annotations = k8s_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline ID should be preserved in annotations: {original_id}"
@@ -163,7 +187,7 @@ def compare_complete_k8s_objects(k8s_resource: Dict[str, Any], original_resource
                 f"Experiment name mismatch: k8s={k8s_name}, original={original_name}"
         
         # Validate experiment ID preservation
-        original_id = original_object.get('experiment_id') or original_resource.get('id')
+        original_id = original_object.get('experiment_id') or getattr(original_resource, 'experiment_id', None)
         k8s_id = getattr(k8s_resource, 'experiment_id', None) or k8s_resource.get('experiment_id')
         if k8s_id and original_id:
             # In K8s mode, experiment IDs may be different but should exist
@@ -207,12 +231,16 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     # Find corresponding original pipeline in test data
     original_pipeline = None
     for pipeline in test_data.get("pipelines", []):
-        if pipeline.get("name") == first_pipeline_name:
+        # Handle both KFP client objects and dict structures
+        pipeline_name = getattr(pipeline, 'display_name', None) or getattr(pipeline, 'name', None) or pipeline.get("name", "")
+        if pipeline_name == first_pipeline_name:
             original_pipeline = pipeline
             break
     
     if original_pipeline:
-        validate_pipeline_structure(pipeline_details, original_pipeline["id"])
+        # Get pipeline ID from KFP client object or dict
+        original_id = getattr(original_pipeline, 'pipeline_id', None) or original_pipeline.get("id", "")
+        validate_pipeline_structure(pipeline_details, original_id)
         # Enhanced validation using complete object comparison
         compare_complete_k8s_objects(pipeline_details, original_pipeline, "Pipeline")
     else:
@@ -513,31 +541,37 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
             assert field_exists, f"Key field {field} should be preserved in recurring run structure"
     
     # Enhanced validation using complete object comparison
-    if 'object_serialized' in original_recurring_run:
+    if hasattr(original_recurring_run, '__dict__'):
+        # This is a KFP client object, serialize it for comparison
+        original_object = serialize_object_for_comparison(original_recurring_run)
+    elif isinstance(original_recurring_run, dict) and 'object_serialized' in original_recurring_run:
+        # This is the old dict structure
         original_object = original_recurring_run['object_serialized']
+    else:
+        return  # Skip detailed comparison if object not available
+    
+    # Validate recurring run name preservation
+    original_name = original_object.get('display_name') or original_object.get('name')
+    if original_name and current_run_name:
+        assert current_run_name == original_name, \
+            f"Recurring run name should be preserved: expected={original_name}, got={current_run_name}"
+    
+    # Validate trigger/schedule preservation
+    if 'trigger' in original_object and original_object['trigger']:
+        current_trigger = recurring_run.get('trigger', {})
+        original_trigger = original_object['trigger']
         
-        # Validate recurring run name preservation
-        original_name = original_object.get('display_name') or original_object.get('name')
-        if original_name and current_run_name:
-            assert current_run_name == original_name, \
-                f"Recurring run name should be preserved: expected={original_name}, got={current_run_name}"
-        
-        # Validate trigger/schedule preservation
-        if 'trigger' in original_object and original_object['trigger']:
-            current_trigger = recurring_run.get('trigger', {})
-            original_trigger = original_object['trigger']
-            
-            # Check cron schedule preservation
-            if 'cron_schedule' in original_trigger:
-                assert 'cron_schedule' in current_trigger, "Cron schedule should be preserved"
-                original_cron = original_trigger['cron_schedule'].get('cron')
-                current_cron = current_trigger['cron_schedule'].get('cron')
-                assert current_cron == original_cron, \
-                    f"Cron schedule should match: expected={original_cron}, got={current_cron}"
-        
-        # Validate status and enabled state if available
-        if 'enabled' in original_object:
-            current_enabled = recurring_run.get('enabled')
-            if current_enabled is not None:
-                assert current_enabled == original_object['enabled'], \
-                    "Recurring run enabled state should be preserved"
+        # Check cron schedule preservation
+        if 'cron_schedule' in original_trigger:
+            assert 'cron_schedule' in current_trigger, "Cron schedule should be preserved"
+            original_cron = original_trigger['cron_schedule'].get('cron')
+            current_cron = current_trigger['cron_schedule'].get('cron')
+            assert current_cron == original_cron, \
+                f"Cron schedule should match: expected={original_cron}, got={current_cron}"
+    
+    # Validate status and enabled state if available
+    if 'enabled' in original_object:
+        current_enabled = recurring_run.get('enabled')
+        if current_enabled is not None:
+            assert current_enabled == original_object['enabled'], \
+                "Recurring run enabled state should be preserved"

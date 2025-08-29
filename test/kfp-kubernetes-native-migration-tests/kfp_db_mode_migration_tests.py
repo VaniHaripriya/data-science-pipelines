@@ -35,6 +35,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools/k8s-nati
 
 from migration import migrate
 
+# Import serialization function from create_test_pipelines
+sys.path.insert(0, os.path.dirname(__file__))
+from create_test_pipelines import serialize_object_for_comparison
+
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
 
@@ -118,21 +122,28 @@ def validate_resource_structure(resource: Dict[str, Any], expected_fields: Dict[
         assert current == expected_value, f"Field {field_path}: expected {expected_value}, got {current}"
 
 
-def find_test_data_by_name(test_data: Dict[str, Any], resource_type: str, name: str) -> Dict[str, Any]:
+def find_test_data_by_name(test_data: Dict[str, Any], resource_type: str, name: str):
     """Find a resource in test data by name."""
     resources = test_data.get(resource_type, [])
     for resource in resources:
-        if name in resource.get("name", ""):
+        # Handle both KFP client objects and dict structures
+        resource_name = getattr(resource, 'display_name', None) or getattr(resource, 'name', None) or resource.get("name", "")
+        if name in str(resource_name):
             return resource
     pytest.fail(f"Test data should contain {resource_type} with name containing '{name}'")
 
 
-def compare_complete_objects(migrated_resource: Dict[str, Any], original_resource: Dict[str, Any], resource_type: str) -> None:
+def compare_complete_objects(migrated_resource: Dict[str, Any], original_resource, resource_type: str) -> None:
     """Compare complete objects using serialized data from KFP client retrieval."""
-    if 'object_serialized' not in original_resource:
-        return  # Skip detailed comparison if serialized object not available
-    
-    original_object = original_resource['object_serialized']
+    # Handle both KFP client objects and dict structures
+    if hasattr(original_resource, '__dict__'):
+        # This is a KFP client object, serialize it for comparison
+        original_object = serialize_object_for_comparison(original_resource)
+    elif isinstance(original_resource, dict) and 'object_serialized' in original_resource:
+        # This is the old dict structure
+        original_object = original_resource['object_serialized']
+    else:
+        return  # Skip detailed comparison if object not available
     
     # Core validations based on resource type
     if resource_type == "Pipeline":
@@ -143,7 +154,7 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
             f"Pipeline name mismatch: migrated={migrated_name}, original={original_name}"
         
         # Validate pipeline ID preservation in annotations
-        original_id = original_object.get('pipeline_id') or original_resource.get('id')
+        original_id = original_object.get('pipeline_id') or getattr(original_resource, 'pipeline_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline ID should be preserved in annotations: {original_id}"
@@ -154,7 +165,7 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
         migrated_name = migrated_resource.get('metadata', {}).get('name')
         
         # Validate version ID preservation in annotations
-        original_id = original_object.get('pipeline_version_id') or original_resource.get('id')
+        original_id = original_object.get('pipeline_version_id') or getattr(original_resource, 'pipeline_version_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline version ID should be preserved in annotations: {original_id}"
@@ -172,28 +183,34 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
             "Creation timestamp should be preserved in annotations"
 
 
-def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipeline: Dict[str, Any]) -> None:
+def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipeline) -> None:
     """Compare migrated pipeline with original pipeline using complete object comparison."""
     # Validate basic structure
     assert 'metadata' in migrated_pipeline, "Migrated pipeline should have metadata"
     assert 'spec' in migrated_pipeline, "Migrated pipeline should have spec"
     
+    # Get pipeline name and ID from KFP client object or dict
+    original_name = getattr(original_pipeline, 'display_name', None) or getattr(original_pipeline, 'name', None) or original_pipeline.get('name', '')
+    original_id = getattr(original_pipeline, 'pipeline_id', None) or original_pipeline.get('id', '')
+    
     # Validate metadata preservation
-    assert migrated_pipeline['metadata']['name'] == original_pipeline['name'], "Pipeline name should be preserved"
+    assert migrated_pipeline['metadata']['name'] == original_name, "Pipeline name should be preserved"
     assert migrated_pipeline['metadata']['namespace'] == 'kubeflow', "Pipeline should be in kubeflow namespace"
     
     # Validate original ID annotation
-    validate_original_id_annotation(migrated_pipeline, original_pipeline['id'])
+    validate_original_id_annotation(migrated_pipeline, original_id)
     
     # Validate description preservation if available
-    if 'description' in original_pipeline:
+    original_description = getattr(original_pipeline, 'description', None) or original_pipeline.get('description', '')
+    if original_description:
         pipeline_spec = migrated_pipeline.get('spec', {})
         if 'description' in pipeline_spec:
-            assert pipeline_spec['description'] == original_pipeline['description'], "Pipeline description should be preserved"
+            assert pipeline_spec['description'] == original_description, "Pipeline description should be preserved"
     
     # Enhanced validation using complete object data
-    if 'object_serialized' in original_pipeline:
-        original_object = original_pipeline['object_serialized']
+    if hasattr(original_pipeline, '__dict__'):
+        # This is a KFP client object, serialize it for comparison
+        original_object = serialize_object_for_comparison(original_pipeline)
         
         # Validate core pipeline attributes are preserved
         original_name = original_object.get('display_name') or original_object.get('name')
