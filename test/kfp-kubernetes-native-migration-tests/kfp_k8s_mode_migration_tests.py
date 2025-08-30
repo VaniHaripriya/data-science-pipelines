@@ -204,7 +204,7 @@ def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type:
     # Validate creation timestamp preservation if available (optional)
     if 'created_at' in original_object:
         # K8s resources should have creationTimestamp in metadata
-        creation_time = k8s_resource.get('metadata', {}).get('creationTimestamp')
+        creation_time = (k8s_resource.get('metadata', {}).get('creationTimestamp') if hasattr(k8s_resource, 'get') else None)
         if not creation_time:
             # For client objects, check if they have created_at attribute
             creation_time = getattr(k8s_resource, 'created_at', None)
