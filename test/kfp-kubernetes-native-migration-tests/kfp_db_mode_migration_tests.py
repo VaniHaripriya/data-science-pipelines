@@ -149,70 +149,70 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
     # Core validations based on resource type
     if resource_type == "Pipeline":
         # Validate pipeline-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         migrated_name = migrated_resource.get('metadata', {}).get('name')
         assert migrated_name == original_name, \
             f"Pipeline name mismatch: migrated={migrated_name}, original={original_name}"
         
         # Validate pipeline ID preservation in annotations
-        original_id = original_object.get('pipeline_id') or getattr(original_resource, 'pipeline_id', None)
+        original_id = (original_object.get('pipeline_id') if hasattr(original_object, 'get') else getattr(original_object, 'pipeline_id', None)) or getattr(original_resource, 'pipeline_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline ID should be preserved in annotations: {original_id}"
     
     elif resource_type == "PipelineVersion":
         # Validate pipeline version-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         migrated_name = migrated_resource.get('metadata', {}).get('name')
         
         # Validate version ID preservation in annotations
-        original_id = original_object.get('pipeline_version_id') or getattr(original_resource, 'pipeline_version_id', None)
+        original_id = (original_object.get('pipeline_version_id') if hasattr(original_object, 'get') else getattr(original_object, 'pipeline_version_id', None)) or getattr(original_resource, 'pipeline_version_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline version ID should be preserved in annotations: {original_id}"
         
         # Validate pipeline spec preservation
-        if 'pipeline_spec' in original_object:
+        if (hasattr(original_object, 'get') and 'pipeline_spec' in original_object) or (hasattr(original_object, 'pipeline_spec') and getattr(original_object, 'pipeline_spec', None) is not None):
             assert 'spec' in migrated_resource, "Migrated pipeline version should have spec"
             assert 'pipelineSpec' in migrated_resource['spec'], "Should have pipelineSpec in spec"
     
     elif resource_type == "Experiment":
         # Validate experiment-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         migrated_name = migrated_resource.get('metadata', {}).get('name')
         assert migrated_name == original_name, \
             f"Experiment name mismatch: migrated={migrated_name}, original={original_name}"
         
         # Validate experiment ID preservation in annotations
-        original_id = original_object.get('experiment_id') or getattr(original_resource, 'experiment_id', None)
+        original_id = (original_object.get('experiment_id') if hasattr(original_object, 'get') else getattr(original_object, 'experiment_id', None)) or getattr(original_resource, 'experiment_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Experiment ID should be preserved in annotations: {original_id}"
     
     elif resource_type == "Run":
         # Validate run-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         migrated_name = migrated_resource.get('metadata', {}).get('name')
         
         # Validate run ID preservation in annotations
-        original_id = original_object.get('run_id') or getattr(original_resource, 'run_id', None)
+        original_id = (original_object.get('run_id') if hasattr(original_object, 'get') else getattr(original_object, 'run_id', None)) or getattr(original_resource, 'run_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Run ID should be preserved in annotations: {original_id}"
     
     elif resource_type == "RecurringRun":
         # Validate recurring run-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         migrated_name = migrated_resource.get('metadata', {}).get('name')
         
         # Validate recurring run ID preservation in annotations
-        original_id = original_object.get('recurring_run_id') or getattr(original_resource, 'recurring_run_id', None)
+        original_id = (original_object.get('recurring_run_id') if hasattr(original_object, 'get') else getattr(original_object, 'recurring_run_id', None)) or getattr(original_resource, 'recurring_run_id', None)
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Recurring run ID should be preserved in annotations: {original_id}"
     
     # Validate creation timestamp preservation if available (optional)
-    if 'created_at' in original_object:
+    if (hasattr(original_object, 'get') and 'created_at' in original_object) or (hasattr(original_object, 'created_at') and getattr(original_object, 'created_at', None) is not None):
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         has_timestamp = any(key.startswith('pipelines.kubeflow.org/') and 'created' in key.lower() 
                           for key in annotations.keys())
@@ -250,14 +250,14 @@ def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipelin
         original_object = serialize_object_for_comparison(original_pipeline)
         
         # Validate core pipeline attributes are preserved
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         assert migrated_pipeline['metadata']['name'] == original_name, \
             f"Pipeline name mismatch: migrated={migrated_pipeline['metadata']['name']}, original={original_name}"
         
         # Validate creation timestamp preservation in annotations if available (optional)
-        if 'created_at' in original_object:
+        if (hasattr(original_object, 'get') and 'created_at' in original_object) or (hasattr(original_object, 'created_at') and getattr(original_object, 'created_at', None) is not None):
             annotations = migrated_pipeline.get('metadata', {}).get('annotations', {})
-            original_created_at = original_object['created_at']
+            original_created_at = original_object.get('created_at') if hasattr(original_object, 'get') else getattr(original_object, 'created_at', None)
             if original_created_at:
                 # Timestamp preservation is optional - just log if not present
                 has_timestamp = ('pipelines.kubeflow.org/created-at' in annotations or 
@@ -266,7 +266,7 @@ def compare_pipeline_objects(migrated_pipeline: Dict[str, Any], original_pipelin
                     print(f"Note: Creation timestamp not preserved in annotations for pipeline {migrated_pipeline['metadata']['name']}")
         
         # Validate pipeline parameters if present
-        if 'parameters' in original_object and original_object['parameters']:
+        if ((hasattr(original_object, 'get') and 'parameters' in original_object and original_object.get('parameters')) or (hasattr(original_object, 'parameters') and getattr(original_object, 'parameters', None) is not None)):
             assert 'spec' in migrated_pipeline, "Migrated pipeline should have spec for parameters"
 
 

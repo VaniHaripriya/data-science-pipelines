@@ -142,27 +142,28 @@ def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type:
     # Core validations based on resource type
     if resource_type == "Pipeline":
         # Validate pipeline-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         k8s_name = k8s_resource.get('metadata', {}).get('name')
         assert k8s_name == original_name, \
             f"Pipeline name mismatch: k8s={k8s_name}, original={original_name}"
         
         # Validate pipeline ID preservation in annotations
-        original_id = original_object.get('pipeline_id') or getattr(original_resource, 'pipeline_id', None)
+        original_id = (original_object.get('pipeline_id') if hasattr(original_object, 'get') else getattr(original_object, 'pipeline_id', None)) or getattr(original_resource, 'pipeline_id', None)
         annotations = k8s_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline ID should be preserved in annotations: {original_id}"
         
         # Validate description preservation if available
-        if 'description' in original_object:
+        if (hasattr(original_object, 'get') and 'description' in original_object) or (hasattr(original_object, 'description') and getattr(original_object, 'description', None) is not None):
             spec_description = k8s_resource.get('spec', {}).get('description')
             if spec_description:
-                assert spec_description == original_object['description'], \
+                original_description = original_object.get('description') if hasattr(original_object, 'get') else getattr(original_object, 'description', None)
+                assert spec_description == original_description, \
                     "Pipeline description should be preserved in K8s spec"
     
     elif resource_type == "Run":
         # Validate run-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         # For K8s runs, name may come from KFP client response
         if hasattr(k8s_resource, 'display_name'):
             k8s_name = getattr(k8s_resource, 'display_name', None)
@@ -175,34 +176,35 @@ def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type:
             print(f"Note: Run names differ - k8s={k8s_name}, original={original_name}")
         
         # Validate experiment association
-        if 'experiment_id' in original_object:
+        if (hasattr(original_object, 'get') and 'experiment_id' in original_object) or (hasattr(original_object, 'experiment_id') and getattr(original_object, 'experiment_id', None) is not None):
             k8s_experiment_id = getattr(k8s_resource, 'experiment_id', None) or (k8s_resource.get('experiment_id') if hasattr(k8s_resource, 'get') else None)
             assert k8s_experiment_id is not None, "Run should be associated with an experiment in K8s mode"
     
     elif resource_type == "Experiment":
         # Validate experiment-specific attributes
-        original_name = original_object.get('display_name') or original_object.get('name')
+        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
         k8s_name = getattr(k8s_resource, 'display_name', None) or (k8s_resource.get('display_name') if hasattr(k8s_resource, 'get') else None)
         if k8s_name and original_name:
             # Skip strict name validation as K8s tests create new experiments with different names
             print(f"Note: Experiment names differ - k8s={k8s_name}, original={original_name}")
         
         # Validate experiment ID preservation
-        original_id = original_object.get('experiment_id') or getattr(original_resource, 'experiment_id', None)
+        original_id = (original_object.get('experiment_id') if hasattr(original_object, 'get') else getattr(original_object, 'experiment_id', None)) or getattr(original_resource, 'experiment_id', None)
         k8s_id = getattr(k8s_resource, 'experiment_id', None) or (k8s_resource.get('experiment_id') if hasattr(k8s_resource, 'get') else None)
         if k8s_id and original_id:
             # In K8s mode, experiment IDs may be different but should exist
             assert k8s_id is not None, "Experiment should have an ID in K8s mode"
         
         # Validate description preservation if available
-        if 'description' in original_object:
+        if (hasattr(original_object, 'get') and 'description' in original_object) or (hasattr(original_object, 'description') and getattr(original_object, 'description', None) is not None):
             k8s_description = getattr(k8s_resource, 'description', None) or (k8s_resource.get('description') if hasattr(k8s_resource, 'get') else None)
             if k8s_description:
                 # Skip strict description validation as K8s tests create new experiments with different descriptions
-                print(f"Note: Experiment descriptions differ - k8s={k8s_description}, original={original_object['description']}")
+                original_description = original_object.get('description') if hasattr(original_object, 'get') else getattr(original_object, 'description', None)
+                print(f"Note: Experiment descriptions differ - k8s={k8s_description}, original={original_description}")
     
     # Validate creation timestamp preservation if available (optional)
-    if 'created_at' in original_object:
+    if (hasattr(original_object, 'get') and 'created_at' in original_object) or (hasattr(original_object, 'created_at') and getattr(original_object, 'created_at', None) is not None):
         # K8s resources should have creationTimestamp in metadata
         creation_time = (k8s_resource.get('metadata', {}).get('creationTimestamp') if hasattr(k8s_resource, 'get') else None)
         if not creation_time:
@@ -579,18 +581,20 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
         return  # Skip detailed comparison if object not available
     
     # Validate recurring run name preservation
-    original_name = original_object.get('display_name') or original_object.get('name')
+    original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
     if original_name and current_run_name:
         assert current_run_name == original_name, \
             f"Recurring run name should be preserved: expected={original_name}, got={current_run_name}"
     
     # Validate trigger/schedule preservation
-    if 'trigger' in original_object and original_object['trigger']:
+    if ((hasattr(original_object, 'get') and 'trigger' in original_object and original_object['trigger']) or 
+        (hasattr(original_object, 'trigger') and getattr(original_object, 'trigger', None) is not None)):
         current_trigger = recurring_run.get('trigger', {})
-        original_trigger = original_object['trigger']
+        original_trigger = original_object.get('trigger') if hasattr(original_object, 'get') else getattr(original_object, 'trigger', None)
         
         # Check cron schedule preservation
-        if 'cron_schedule' in original_trigger:
+        if ((hasattr(original_trigger, 'get') and 'cron_schedule' in original_trigger) or 
+            (hasattr(original_trigger, 'cron_schedule') and getattr(original_trigger, 'cron_schedule', None) is not None)):
             assert 'cron_schedule' in current_trigger, "Cron schedule should be preserved"
             original_cron = original_trigger['cron_schedule'].get('cron') if hasattr(original_trigger['cron_schedule'], 'get') else None
             current_cron = current_trigger['cron_schedule'].get('cron') if hasattr(current_trigger['cron_schedule'], 'get') else None
@@ -598,8 +602,9 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
                 f"Cron schedule should match: expected={original_cron}, got={current_cron}"
     
     # Validate status and enabled state if available
-    if 'enabled' in original_object:
+    if (hasattr(original_object, 'get') and 'enabled' in original_object) or (hasattr(original_object, 'enabled') and getattr(original_object, 'enabled', None) is not None):
         current_enabled = recurring_run.get('enabled') if hasattr(recurring_run, 'get') else None
         if current_enabled is not None:
-            assert current_enabled == original_object['enabled'], \
+            original_enabled = original_object.get('enabled') if hasattr(original_object, 'get') else getattr(original_object, 'enabled', None)
+            assert current_enabled == original_enabled, \
                 "Recurring run enabled state should be preserved"
