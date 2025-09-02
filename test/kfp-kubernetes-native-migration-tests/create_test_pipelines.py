@@ -285,5 +285,31 @@ def main():
     print(f"\nTest data saved to {migration_test_data_file}")
     print("Test environment setup complete!") 
     
+    # Debug: Print detailed breakdown
+    print(f"\nDetailed breakdown:")
+    print(f"Total items in test_data['pipelines']: {len(test_data['pipelines'])}")
+    
+    # Count pipelines (have pipeline_id but not pipeline_version_id)
+    pipelines = [p for p in test_data['pipelines'] if hasattr(p, 'pipeline_id') and not hasattr(p, 'pipeline_version_id')]
+    # Count pipeline versions (have both pipeline_id and pipeline_version_id)
+    versions = [p for p in test_data['pipelines'] if hasattr(p, 'pipeline_version_id')]
+    
+    print(f"- {len(pipelines)} pipelines")
+    print(f"- {len(versions)} pipeline versions")
+    print(f"- {len(test_data['experiments'])} experiments")
+    print(f"- {len(test_data['runs'])} runs")
+    print(f"- {len(test_data['recurring_runs'])} recurring runs")
+    
+    # Pipeline details
+    for i, p in enumerate(pipelines):
+        print(f"  Pipeline {i+1}: {getattr(p, 'display_name', 'Unknown')} (ID: {getattr(p, 'pipeline_id', 'Unknown')})")
+    
+    # Version details  
+    for i, v in enumerate(versions):
+        parent_id = getattr(v, 'pipeline_id', 'Unknown')
+        version_id = getattr(v, 'pipeline_version_id', 'Unknown')
+        version_name = getattr(v, 'display_name', 'Unknown')
+        print(f"  Version {i+1}: {version_name} (Version ID: {version_id}, Parent Pipeline ID: {parent_id})")
+    
 if __name__ == "__main__":
     main()
