@@ -271,17 +271,14 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
     migrated_pipeline = complex_pipeline_resources[0]    
     compare_complete_objects(migrated_pipeline, original_pipeline, "Pipeline")
     
-    pipeline_versions = migrated_resources["PipelineVersion"]
+    pipeline_versions = migrated_resources["PipelineVersion"]    
     
-    # Debug: Print pipelineRef values
-    print(f"\nDebugging pipelineRef values:")
-    for i, v in enumerate(pipeline_versions):
-        version_name = v.get('metadata', {}).get('name', 'Unknown')
-        pipeline_ref = v.get("spec", {}).get("pipelineRef", {}).get("name", "None")
-        print(f"  Version {i+1}: {version_name} -> pipelineRef: {pipeline_ref}")
-    
-    complex_versions = [v for v in pipeline_versions 
-                       if v.get("spec", {}).get("pipelineRef", {}).get("name") == "add-numbers"]
+    # Find versions that belong to add-numbers pipeline
+    complex_versions = []
+    for version in pipeline_versions:        
+        pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
+        if pipeline_name == 'add-numbers':
+            complex_versions.append(version)
     assert len(complex_versions) >= 3, f"add-numbers pipeline should have at least 3 versions, found {len(complex_versions)}"
     
     print(f"Found {len(complex_versions)} versions for add-numbers pipeline")
@@ -327,18 +324,24 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
     hello_world_pipelines = [p for p in pipelines if "hello-world" in p.get("metadata", {}).get("name", "")]
     assert len(hello_world_pipelines) >= 1, "Should have hello-world pipeline"
     
-    # Filter versions by pipeline reference
-    hello_world_versions = [v for v in pipeline_versions 
-                           if v.get("spec", {}).get("pipelineRef", {}).get("name") == "hello-world"]
+    # Find hello-world versions
+    hello_world_versions = []
+    for version in pipeline_versions:
+        pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
+        if pipeline_name == 'hello-world':
+            hello_world_versions.append(version)
     assert len(hello_world_versions) >= 1, "Hello-world should have at least 1 version"
     
     # Validate add-numbers pipeline and its multiple versions
     add_numbers_pipelines = [p for p in pipelines if "add-numbers" in p.get("metadata", {}).get("name", "")]
     assert len(add_numbers_pipelines) >= 1, "Should have add-numbers pipeline"
     
-    # Filter versions by pipeline reference
-    add_numbers_versions = [v for v in pipeline_versions 
-                           if v.get("spec", {}).get("pipelineRef", {}).get("name") == "add-numbers"]
+    # Find add-numbers versions
+    add_numbers_versions = []
+    for version in pipeline_versions:
+        pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
+        if pipeline_name == 'add-numbers':
+            add_numbers_versions.append(version)
     assert len(add_numbers_versions) >= 3, f"Add-numbers should have at least 3 versions, found {len(add_numbers_versions)}"
    
     # Validate all pipelines against original data
