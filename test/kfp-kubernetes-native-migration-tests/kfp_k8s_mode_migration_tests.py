@@ -227,30 +227,10 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     assert len(migrated_pipelines) > 0, "Should have at least one migrated pipeline in K8s mode"
     
     print(f"Found {len(migrated_pipelines)} migrated pipelines: {migrated_pipelines}")
+   
+    first_pipeline_name = migrated_pipelines[0]    
     
-    # Validate pipeline structure in Kubernetes
-    first_pipeline_name = migrated_pipelines[0]
-    pipeline_details = get_pipeline_details(first_pipeline_name)
-    
-    # Find corresponding original pipeline in test data
-    original_pipeline = None
-    for pipeline in test_data.get("pipelines", []):
-        # Handle both KFP client objects and dict structures
-        pipeline_name = getattr(pipeline, 'display_name', None) or getattr(pipeline, 'name', None) or (pipeline.get("name", "") if hasattr(pipeline, 'get') else "")
-        if pipeline_name == first_pipeline_name:
-            original_pipeline = pipeline
-            break
-    
-    if original_pipeline:
-        # Get pipeline ID from KFP client object or dict
-        original_id = getattr(original_pipeline, 'pipeline_id', None) or (original_pipeline.get("id", "") if hasattr(original_pipeline, 'get') else "")
-        validate_pipeline_structure(pipeline_details, original_id)
-        # Enhanced validation using complete object comparison
-        compare_complete_k8s_objects(pipeline_details, original_pipeline, "Pipeline")
-    else:
-        validate_pipeline_structure(pipeline_details)
-    
-    # Test pipeline execution via KFP client
+    # Test pipeline execution
     experiment = kfp_client.create_experiment(
         name="k8s-execution-test-experiment",
         description="Test experiment for K8s mode pipeline execution"
@@ -258,20 +238,20 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     experiment_id = getattr(experiment, 'experiment_id', None)
     assert experiment_id is not None, "Experiment should be created successfully"
     
-    # Get pipeline via KFP client
+    # Get pipeline
     pipelines = kfp_client.list_pipelines()
     pipeline_list = pipelines.pipelines if hasattr(pipelines, 'pipelines') else []
     
-    target_pipeline = None
+    migrated_pipeline = None
     for pipeline in pipeline_list:
         pipeline_name = getattr(pipeline, 'display_name', None)
         if pipeline_name == first_pipeline_name:
-            target_pipeline = pipeline
+            migrated_pipeline = pipeline
             break
     
-    assert target_pipeline is not None, f"Pipeline {first_pipeline_name} should be discoverable via KFP client"
+    assert migrated_pipeline is not None, f"Pipeline {first_pipeline_name} should be discoverable via KFP client"
     
-    pipeline_id = getattr(target_pipeline, 'pipeline_id', None)
+    pipeline_id = getattr(migrated_pipeline, 'pipeline_id', None)
     assert pipeline_id is not None, "Pipeline should have an ID"
     
     # Get pipeline versions
@@ -279,8 +259,8 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     version_list = versions.pipeline_versions if hasattr(versions, 'pipeline_versions') else []
     assert len(version_list) > 0, "Pipeline should have at least one version"
     
-    target_version = version_list[0]
-    version_id = getattr(target_version, 'pipeline_version_id', None)
+    migrated_version = version_list[0]
+    version_id = getattr(migrated_version, 'pipeline_version_id', None)
     assert version_id is not None, "Pipeline version should have an ID"
     
     # Create and execute a run

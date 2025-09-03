@@ -273,6 +273,13 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
     
     pipeline_versions = migrated_resources["PipelineVersion"]
     
+    # Debug: Print pipelineRef values
+    print(f"\nDebugging pipelineRef values:")
+    for i, v in enumerate(pipeline_versions):
+        version_name = v.get('metadata', {}).get('name', 'Unknown')
+        pipeline_ref = v.get("spec", {}).get("pipelineRef", {}).get("name", "None")
+        print(f"  Version {i+1}: {version_name} -> pipelineRef: {pipeline_ref}")
+    
     complex_versions = [v for v in pipeline_versions 
                        if v.get("spec", {}).get("pipelineRef", {}).get("name") == "add-numbers"]
     assert len(complex_versions) >= 3, f"add-numbers pipeline should have at least 3 versions, found {len(complex_versions)}"
