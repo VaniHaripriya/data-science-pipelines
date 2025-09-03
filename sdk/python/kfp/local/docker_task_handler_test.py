@@ -108,6 +108,82 @@ class TestDockerTaskHandler(DockerMockTestCase):
                 }
             })
 
+    def test_get_volumes_to_mount_with_workspace(self):
+        """Test that workspace is properly mounted when configured."""
+        # Mock the LocalExecutionConfig to have a workspace_root
+        with mock.patch('kfp.local.config.LocalExecutionConfig.instance') as mock_instance:
+            mock_instance.workspace_root = '/tmp/test-workspace'
+            
+            handler = docker_task_handler.DockerTaskHandler(
+                image='alpine',
+                full_command=['echo', 'foo'],
+                pipeline_root=os.path.abspath('my_root'),
+                runner=local.DockerRunner(),
+            )
+            volumes = handler.get_volumes_to_mount()
+            
+            expected_volumes = {
+                os.path.abspath('my_root'): {
+                    'bind': os.path.abspath('my_root'),
+                    'mode': 'rw'
+                },
+                '/tmp/test-workspace': {
+                    'bind': '/kfp-workspace',
+                    'mode': 'rw'
+                }
+            }
+            self.assertEqual(volumes, expected_volumes)
+
+    def test_get_volumes_to_mount_with_relative_workspace(self):
+        """Test that relative workspace paths are converted to absolute paths."""
+        # Mock the LocalExecutionConfig to have a relative workspace_root
+        with mock.patch('kfp.local.config.LocalExecutionConfig.instance') as mock_instance:
+            mock_instance.workspace_root = 'test-workspace'
+            
+            handler = docker_task_handler.DockerTaskHandler(
+                image='alpine',
+                full_command=['echo', 'foo'],
+                pipeline_root=os.path.abspath('my_root'),
+                runner=local.DockerRunner(),
+            )
+            volumes = handler.get_volumes_to_mount()
+            
+            # The relative workspace path should be converted to absolute
+            abs_workspace_path = os.path.abspath('test-workspace')
+            expected_volumes = {
+                os.path.abspath('my_root'): {
+                    'bind': os.path.abspath('my_root'),
+                    'mode': 'rw'
+                },
+                abs_workspace_path: {
+                    'bind': '/kfp-workspace',
+                    'mode': 'rw'
+                }
+            }
+            self.assertEqual(volumes, expected_volumes)
+
+    def test_get_volumes_to_mount_without_workspace(self):
+        """Test that no workspace volume is added when workspace is not configured."""
+        # Mock the LocalExecutionConfig to have no workspace_root
+        with mock.patch('kfp.local.config.LocalExecutionConfig.instance') as mock_instance:
+            mock_instance.workspace_root = None
+            
+            handler = docker_task_handler.DockerTaskHandler(
+                image='alpine',
+                full_command=['echo', 'foo'],
+                pipeline_root=os.path.abspath('my_root'),
+                runner=local.DockerRunner(),
+            )
+            volumes = handler.get_volumes_to_mount()
+            
+            expected_volumes = {
+                os.path.abspath('my_root'): {
+                    'bind': os.path.abspath('my_root'),
+                    'mode': 'rw'
+                }
+            }
+            self.assertEqual(volumes, expected_volumes)
+
     def test_run(self):
         handler = docker_task_handler.DockerTaskHandler(
             image='alpine',
@@ -147,21 +223,13 @@ class TestDockerTaskHandler(DockerMockTestCase):
 class TestAddLatestTagIfNotPresent(unittest.TestCase):
 
     def test_no_tag(self):
-        actual = docker_task_handler.add_latest_tag_if_not_present(
-            image='alpine')
+        actual = docker_task_handler.add_latest_tag_if_not_present('alpine')
         expected = 'alpine:latest'
         self.assertEqual(actual, expected)
 
-    def test_latest_tag(self):
-        actual = docker_task_handler.add_latest_tag_if_not_present(
-            image='alpine:latest')
-        expected = 'alpine:latest'
-        self.assertEqual(actual, expected)
-
-    def test_no_tag(self):
-        actual = docker_task_handler.add_latest_tag_if_not_present(
-            image='alpine:3.19.0')
-        expected = 'alpine:3.19.0'
+    def test_with_tag(self):
+        actual = docker_task_handler.add_latest_tag_if_not_present('alpine:3.14')
+        expected = 'alpine:3.14'
         self.assertEqual(actual, expected)
 
 
