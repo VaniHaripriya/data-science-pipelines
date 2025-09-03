@@ -324,11 +324,11 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
     hello_world_pipelines = [p for p in pipelines if "hello-world" in p.get("metadata", {}).get("name", "")]
     assert len(hello_world_pipelines) >= 1, "Should have hello-world pipeline"
     
-    # Find hello-world versions
+    # Find hello-world versions (using actual pipelineInfo.name which is 'echo')
     hello_world_versions = []
     for version in pipeline_versions:
         pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
-        if pipeline_name == 'hello-world':
+        if pipeline_name == 'echo':  # hello-world pipeline has pipelineInfo.name = 'echo'
             hello_world_versions.append(version)
     assert len(hello_world_versions) >= 1, "Hello-world should have at least 1 version"
     
