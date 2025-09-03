@@ -261,6 +261,21 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
     assert len(yaml_files) > 0, "Migration should create YAML files"    
     
     migrated_resources = parse_yaml_files(output_dir)
+    
+    # Debug: Print migrated resource counts
+    print(f"\nMigrated resources summary:")
+    print(f"- Pipelines: {len(migrated_resources['Pipeline'])}")
+    print(f"- PipelineVersions: {len(migrated_resources['PipelineVersion'])}")
+    print(f"- Experiments: {len(migrated_resources['Experiment'])}")
+    print(f"- Runs: {len(migrated_resources['Run'])}")
+    print(f"- RecurringRuns: {len(migrated_resources['RecurringRun'])}")
+    
+    # Debug: Print PipelineVersion details
+    print(f"\nPipelineVersion details:")
+    for i, version in enumerate(migrated_resources['PipelineVersion']):
+        name = version.get('metadata', {}).get('name', 'Unknown')
+        original_id = version.get('metadata', {}).get('annotations', {}).get('pipelines.kubeflow.org/original-id', 'Unknown')
+        print(f"  Version {i+1}: {name} (Original ID: {original_id})")
     original_pipeline = find_test_data_by_name(test_data, "pipelines", "add-numbers")
     pipelines = migrated_resources["Pipeline"]
     complex_pipeline_resources = [p for p in pipelines 
