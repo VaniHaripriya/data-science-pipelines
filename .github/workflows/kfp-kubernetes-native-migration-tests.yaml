@@ -80,17 +80,8 @@ jobs:
         if: ${{ steps.install-kfp-k8s-deps.outcome == 'success' }}
         run: pip install -r ./test/kfp-kubernetes-native-migration-tests/requirements.txt
 
-      - name: Verify test pipeline files exist
-        if: ${{ steps.install-requirements.outcome == 'success' }}
-        id: verify-pipeline-files
-        run: |
-          echo "Verifying required pipeline files exist..."
-          ls -la test_data/pipeline_files/valid/critical/hello-world.yaml
-          ls -la test_data/pipeline_files/valid/add_numbers.yaml
-          echo "Pipeline files verified successfully."
-
       - name: Create test pipelines in DB mode
-        if: ${{ steps.verify-pipeline-files.outcome == 'success' }}
+        if: ${{ steps.install-requirements.outcome == 'success' }}
         id: create-test-pipelines
         run: |
           echo "Creating test pipelines using existing pipeline files..."

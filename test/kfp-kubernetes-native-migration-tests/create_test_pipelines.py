@@ -70,9 +70,6 @@ def create_pipeline(name, description, pipeline_file_path):
 
     # Retrieve the complete pipeline object from the database
     complete_pipeline = client.get_pipeline(pipeline.pipeline_id)
-
-    print(f"Complete Pipeline Object: {complete_pipeline}")
-    print(f"Pipeline Object Serialized: {serialize_object_for_comparison(complete_pipeline)}")
     
     # Return the complete pipeline object directly for comprehensive comparison
     return complete_pipeline
@@ -90,9 +87,6 @@ def create_pipeline_version(pipeline_id, name, pipeline_file_path):
 
     # Retrieve the complete pipeline version object from the database
     complete_version = client.get_pipeline_version(pipeline_id, version.pipeline_version_id)
-
-    print(f"Complete Version Object: {complete_version}")
-    print(f"Version Object Serialized: {serialize_object_for_comparison(complete_version)}")
     
     # Return the complete pipeline version object directly for comprehensive comparison
     return complete_version
@@ -110,9 +104,6 @@ def create_experiment(name, description):
 
     # Retrieve the complete experiment object from the database
     complete_experiment = client.get_experiment(experiment_id)
-
-    print(f"Complete Experiment Object: {complete_experiment}")
-    print(f"Experiment Object Serialized: {serialize_object_for_comparison(complete_experiment)}")
     
     # Return the complete experiment object directly for comprehensive comparison
     return complete_experiment
@@ -139,9 +130,6 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
     # Retrieve the complete run object from the database
     complete_run = client.get_run(run_id)
 
-    print(f"Complete Run Object: {complete_run}")
-    print(f"Run Object Serialized: {serialize_object_for_comparison(complete_run)}")
-    
     # Return the complete run object directly for comprehensive comparison
     return complete_run
 
@@ -168,9 +156,6 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
     # Retrieve the complete recurring run object from the database
     complete_recurring_run = client.get_recurring_run(recurring_run_id)
 
-    print(f"Complete Recurring Run Object: {complete_recurring_run}")
-    print(f"Recurring Run Object Serialized: {serialize_object_for_comparison(complete_recurring_run)}")
-    
     # Return the complete recurring run object directly for comprehensive comparison
     return complete_recurring_run
 

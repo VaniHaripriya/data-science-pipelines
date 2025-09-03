@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Dict, List, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from create_test_pipelines import serialize_object_for_comparison
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
@@ -94,76 +95,39 @@ def get_pipeline_details(pipeline_name: str) -> Dict[str, Any]:
     
     return json.loads(result.stdout)
 
-
-def validate_pipeline_structure(pipeline_data: Dict[str, Any], expected_original_id: str = None) -> None:
-    """Validate that a pipeline has the expected Kubernetes structure."""
-    assert 'metadata' in pipeline_data, "Pipeline should have metadata"
-    assert 'spec' in pipeline_data, "Pipeline should have spec"
-    assert pipeline_data['kind'] == 'Pipeline', "Resource should be a Pipeline"
-    assert pipeline_data['metadata']['namespace'] == 'kubeflow', "Pipeline should be in kubeflow namespace"
-    
-    if expected_original_id:
-        annotations = pipeline_data.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == expected_original_id, \
-            f"Pipeline should have original ID annotation: {expected_original_id}"
-
-
-def serialize_object_for_comparison(obj):
-    """Serialize KFP objects to JSON-serializable format for comparison."""
-    if hasattr(obj, 'to_dict'):
-        return obj.to_dict()
-    elif hasattr(obj, '__dict__'):
-        # Convert object attributes to dict, handling nested objects
-        result = {}
-        for key, value in obj.__dict__.items():
-            if hasattr(value, 'to_dict'):
-                result[key] = value.to_dict()
-            elif hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, type(None))):
-                result[key] = serialize_object_for_comparison(value)
-            else:
-                result[key] = value
-        return result
-    else:
-        return str(obj)
-
-
 def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type: str) -> None:
     """Compare K8s native resources with original DB mode objects using complete object comparison."""
-    # Handle both KFP client objects and dict structures
     if hasattr(original_resource, '__dict__'):
         # This is a KFP client object, serialize it for comparison
         original_object = serialize_object_for_comparison(original_resource)
-    elif isinstance(original_resource, dict) and 'object_serialized' in original_resource:
-        # This is the old dict structure
-        original_object = original_resource['object_serialized']
     else:
         return  # Skip detailed comparison if object not available
     
     # Core validations based on resource type
     if resource_type == "Pipeline":
         # Validate pipeline-specific attributes
-        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
+        original_name = original_object.get('display_name')
         k8s_name = k8s_resource.get('metadata', {}).get('name')
         assert k8s_name == original_name, \
             f"Pipeline name mismatch: k8s={k8s_name}, original={original_name}"
         
         # Validate pipeline ID preservation in annotations
-        original_id = (original_object.get('pipeline_id') if hasattr(original_object, 'get') else getattr(original_object, 'pipeline_id', None)) or getattr(original_resource, 'pipeline_id', None)
+        original_id = original_object.get('pipeline_id')
         annotations = k8s_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Pipeline ID should be preserved in annotations: {original_id}"
         
         # Validate description preservation if available
-        if (hasattr(original_object, 'get') and 'description' in original_object) or (hasattr(original_object, 'description') and getattr(original_object, 'description', None) is not None):
+        if 'description' in original_object and original_object['description']:
             spec_description = k8s_resource.get('spec', {}).get('description')
             if spec_description:
-                original_description = original_object.get('description') if hasattr(original_object, 'get') else getattr(original_object, 'description', None)
+                original_description = original_object.get('description')
                 assert spec_description == original_description, \
                     "Pipeline description should be preserved in K8s spec"
     
     elif resource_type == "Run":
         # Validate run-specific attributes
-        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
+        original_name = original_object.get('display_name')
         # For K8s runs, name may come from KFP client response
         if hasattr(k8s_resource, 'display_name'):
             k8s_name = getattr(k8s_resource, 'display_name', None)
@@ -182,14 +146,14 @@ def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type:
     
     elif resource_type == "Experiment":
         # Validate experiment-specific attributes
-        original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
-        k8s_name = getattr(k8s_resource, 'display_name', None) or (k8s_resource.get('display_name') if hasattr(k8s_resource, 'get') else None)
+        original_name = original_object.get('display_name')
+        k8s_name = getattr(k8s_resource, 'display_name', None)
         if k8s_name and original_name:
             # Skip strict name validation as K8s tests create new experiments with different names
             print(f"Note: Experiment names differ - k8s={k8s_name}, original={original_name}")
         
         # Validate experiment ID preservation
-        original_id = (original_object.get('experiment_id') if hasattr(original_object, 'get') else getattr(original_object, 'experiment_id', None)) or getattr(original_resource, 'experiment_id', None)
+        original_id = original_object.get('experiment_id')
         k8s_id = getattr(k8s_resource, 'experiment_id', None) or (k8s_resource.get('experiment_id') if hasattr(k8s_resource, 'get') else None)
         if k8s_id and original_id:
             # In K8s mode, experiment IDs may be different but should exist
@@ -200,7 +164,7 @@ def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type:
             k8s_description = getattr(k8s_resource, 'description', None) or (k8s_resource.get('description') if hasattr(k8s_resource, 'get') else None)
             if k8s_description:
                 # Skip strict description validation as K8s tests create new experiments with different descriptions
-                original_description = original_object.get('description') if hasattr(original_object, 'get') else getattr(original_object, 'description', None)
+                original_description = original_object.get('description')
                 print(f"Note: Experiment descriptions differ - k8s={k8s_description}, original={original_description}")
     
     # Validate creation timestamp preservation if available (optional)
@@ -453,12 +417,6 @@ def test_k8s_mode_experiment_creation(kfp_client, test_data):
     # Compare with original test data structure for runs
     if test_data.get("runs"):
         original_run = test_data["runs"][0]
-        # Handle both KFP client objects and dict structures
-        if hasattr(original_run, 'keys'):
-            original_structure_keys = set(original_run.keys())
-        else:
-            # For KFP client objects, get attributes
-            original_structure_keys = set(dir(original_run))
         new_structure_keys = set(expected_run_structure.keys())
        
         essential_keys = {"id", "name", "pipeline_spec"}
@@ -487,9 +445,8 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
         return
     
     original_recurring_run = test_data["recurring_runs"][0]
-    # Handle both KFP client objects and dict structures
-    recurring_run_name = getattr(original_recurring_run, 'display_name', None) or getattr(original_recurring_run, 'name', None) or (original_recurring_run.get("name") if hasattr(original_recurring_run, 'get') else None)
-    recurring_run_id = getattr(original_recurring_run, 'recurring_run_id', None) or (original_recurring_run.get("id") if hasattr(original_recurring_run, 'get') else None)
+    recurring_run_name = getattr(original_recurring_run, 'display_name', None)
+    recurring_run_id = getattr(original_recurring_run, 'recurring_run_id', None)
     
     print(f"Testing recurring run continuity: {recurring_run_name} (ID: {recurring_run_id})")
     
@@ -519,7 +476,7 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
         f"Recurring run ID should be preserved: expected {recurring_run_id}, got {current_run_id}"
     
     # Validate cron schedule preservation
-    original_cron = (original_recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron') if hasattr(original_recurring_run, 'get') else None)
+    original_cron = getattr(getattr(getattr(original_recurring_run, 'trigger', {}), 'cron_schedule', {}), 'cron', None)
     current_cron = (recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron') if hasattr(recurring_run, 'get') else None)
     
     # Validate cron schedule exists (original may be None due to serialization)
@@ -531,21 +488,11 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
         print(f"Note: Original cron {original_cron} not preserved in K8s mode")
     
     # Validate recurring run structure matches original format
-    # Handle both KFP client objects and dict structures
-    if hasattr(original_recurring_run, 'keys'):
-        expected_structure_keys = set(original_recurring_run.keys())
-    else:
-        expected_structure_keys = set(dir(original_recurring_run))
-    
     if hasattr(recurring_run, 'keys'):
         current_structure_keys = set(recurring_run.keys())
-    else:
-        current_structure_keys = set(dir(recurring_run))
-    
-    # Check that key fields are preserved
-    key_fields = {'id', 'name', 'trigger'}
-    for field in key_fields:
-        if field in expected_structure_keys:
+        # Check that key fields are preserved
+        key_fields = {'id', 'name', 'trigger'}
+        for field in key_fields:
             field_exists = (field in current_structure_keys or 
                           any(field in k for k in current_structure_keys))
             assert field_exists, f"Key field {field} should be preserved in recurring run structure"
@@ -554,14 +501,11 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     if hasattr(original_recurring_run, '__dict__'):
         # This is a KFP client object, serialize it for comparison
         original_object = serialize_object_for_comparison(original_recurring_run)
-    elif isinstance(original_recurring_run, dict) and 'object_serialized' in original_recurring_run:
-        # This is the old dict structure
-        original_object = original_recurring_run['object_serialized']
     else:
         return  # Skip detailed comparison if object not available
     
     # Validate recurring run name preservation
-    original_name = (original_object.get('display_name') if hasattr(original_object, 'get') else getattr(original_object, 'display_name', None)) or (original_object.get('name') if hasattr(original_object, 'get') else getattr(original_object, 'name', None))
+    original_name = original_object.get('display_name')
     if original_name and current_run_name:
         assert current_run_name == original_name, \
             f"Recurring run name should be preserved: expected={original_name}, got={current_run_name}"
@@ -570,7 +514,7 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     if ((hasattr(original_object, 'get') and 'trigger' in original_object and original_object['trigger']) or 
         (hasattr(original_object, 'trigger') and getattr(original_object, 'trigger', None) is not None)):
         current_trigger = recurring_run.get('trigger', {})
-        original_trigger = original_object.get('trigger') if hasattr(original_object, 'get') else getattr(original_object, 'trigger', None)
+        original_trigger = original_object.get('trigger')
         
         # Check cron schedule preservation
         if ((hasattr(original_trigger, 'get') and 'cron_schedule' in original_trigger) or 
@@ -585,6 +529,6 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     if (hasattr(original_object, 'get') and 'enabled' in original_object) or (hasattr(original_object, 'enabled') and getattr(original_object, 'enabled', None) is not None):
         current_enabled = recurring_run.get('enabled') if hasattr(recurring_run, 'get') else None
         if current_enabled is not None:
-            original_enabled = original_object.get('enabled') if hasattr(original_object, 'get') else getattr(original_object, 'enabled', None)
+            original_enabled = original_object.get('enabled')
             assert current_enabled == original_enabled, \
                 "Recurring run enabled state should be preserved"
