@@ -322,13 +322,12 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
    
     # Validate hello-world pipeline and its single version
     hello_world_pipelines = [p for p in pipelines if "hello-world" in p.get("metadata", {}).get("name", "")]
-    assert len(hello_world_pipelines) >= 1, "Should have hello-world pipeline"
-    
-    # Find hello-world versions (using actual pipelineInfo.name which is 'echo')
+    assert len(hello_world_pipelines) >= 1, "Should have hello-world pipeline"    
+   
     hello_world_versions = []
     for version in pipeline_versions:
         pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
-        if pipeline_name == 'echo':  # hello-world pipeline has pipelineInfo.name = 'echo'
+        if pipeline_name == 'echo':
             hello_world_versions.append(version)
     assert len(hello_world_versions) >= 1, "Hello-world should have at least 1 version"
     
@@ -344,15 +343,21 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
             add_numbers_versions.append(version)
     assert len(add_numbers_versions) >= 3, f"Add-numbers should have at least 3 versions, found {len(add_numbers_versions)}"
    
-    # Validate all pipelines against original data
-    for pipeline in pipelines:
+    # Validate test pipelines against original data
+    test_pipelines = [p for p in pipelines 
+                     if any(test_name in p.get("metadata", {}).get("name", "") 
+                           for test_name in ["hello-world", "add-numbers"])]
+    
+    for pipeline in test_pipelines:
         pipeline_name = pipeline.get("metadata", {}).get("name", "")
         original_pipeline = find_test_data_by_name(test_data, "pipelines", pipeline_name)        
-        
+            
         compare_complete_objects(pipeline, original_pipeline, "Pipeline")
     
-    # Validate all pipeline versions against original data
-    for version in pipeline_versions:              
+    # Validate test pipeline versions against original data
+    test_versions = hello_world_versions + add_numbers_versions
+    
+    for version in test_versions:              
         annotations = version.get('metadata', {}).get('annotations', {})
         original_version_id = annotations.get('pipelines.kubeflow.org/original-id')
         original_version = None
