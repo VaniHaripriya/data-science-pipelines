@@ -35,8 +35,9 @@ class DockerTaskHandler(task_handler_interface.ITaskHandler):
         self.runner = runner
 
     def get_volumes_to_mount(self) -> Dict[str, Any]:
-        """Gets the volume configuration to mount the pipeline root and workspace to the
-        container so that outputs and workspace can be accessed outside of the container."""
+        """Gets the volume configuration to mount the pipeline root and
+        workspace to the container so that outputs and workspace can be
+        accessed outside of the container."""
         if not os.path.isabs(self.pipeline_root):
             # defensive check. this is enforced by upstream code.
             # users should not hit this,

@@ -733,19 +733,19 @@ class TestRunLocalPipeline(testing_utilities.LocalRunnerEnvironmentTestCase):
                     local.DockerRunner(),
                     pipeline_root=ROOT_FOR_TESTING,
                     workspace_root=workspace_root)
-                
+
                 # Verify that the workspace is properly configured
                 self.assertEqual(
                     local.config.LocalExecutionConfig.instance.workspace_root,
-                    workspace_root
-                )
+                    workspace_root)
                 self.assertEqual(
                     type(local.config.LocalExecutionConfig.instance.runner),
-                    local.DockerRunner
+                    local.DockerRunner)
+
+                print(
+                    f"✓ DockerRunner initialized with workspace: {workspace_root}"
                 )
-                
-                print(f"✓ DockerRunner initialized with workspace: {workspace_root}")
-                
+
             except Exception as e:
                 # If Docker is not available, skip the test
                 if "docker" in str(e).lower() or "permission" in str(e).lower():

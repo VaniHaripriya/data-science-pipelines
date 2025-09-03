@@ -135,7 +135,8 @@ class TestDockerTaskHandler(DockerMockTestCase):
             self.assertEqual(volumes, expected_volumes)
 
     def test_get_volumes_to_mount_with_relative_workspace(self):
-        """Test that relative workspace paths are converted to absolute paths."""
+        """Test that relative workspace paths are converted to absolute
+        paths."""
         # Mock the LocalExecutionConfig to have a relative workspace_root
         with mock.patch('kfp.local.config.LocalExecutionConfig.instance') as mock_instance:
             mock_instance.workspace_root = 'test-workspace'
@@ -163,7 +164,8 @@ class TestDockerTaskHandler(DockerMockTestCase):
             self.assertEqual(volumes, expected_volumes)
 
     def test_get_volumes_to_mount_without_workspace(self):
-        """Test that no workspace volume is added when workspace is not configured."""
+        """Test that no workspace volume is added when workspace is not
+        configured."""
         # Mock the LocalExecutionConfig to have no workspace_root
         with mock.patch('kfp.local.config.LocalExecutionConfig.instance') as mock_instance:
             mock_instance.workspace_root = None

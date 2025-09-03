@@ -17,12 +17,12 @@ import json
 import os
 from typing import List, Optional
 import unittest
+from unittest import mock
 
 from absl.testing import parameterized
 from google.protobuf import json_format
 from kfp.local import placeholder_utils
 from kfp.pipeline_spec import pipeline_spec_pb2
-from unittest import mock
 
 executor_input = pipeline_spec_pb2.ExecutorInput()
 json_format.ParseDict(
@@ -524,9 +524,10 @@ class TestWorkspacePlaceholderResolution(unittest.TestCase):
         self.assertIn('file.txt', result)
 
     def test_workspace_configured_resolves(self):
-        """Test that workspace placeholder resolves when workspace is configured."""
+        """Test that workspace placeholder resolves when workspace is
+        configured."""
         from kfp.local import config
-        
+
         # Mock the LocalExecutionConfig to have a workspace_root
         with mock.patch.object(config.LocalExecutionConfig, 'instance') as mock_instance:
             mock_instance.workspace_root = '/tmp/test-workspace'
@@ -549,9 +550,10 @@ class TestWorkspacePlaceholderResolution(unittest.TestCase):
             self.assertEqual(result, '/tmp/test-workspace')
 
     def test_docker_runner_workspace_placeholder_resolution(self):
-        """Test that workspace placeholder resolution works correctly for DockerRunner."""
+        """Test that workspace placeholder resolution works correctly for
+        DockerRunner."""
         from kfp.local import config
-        
+
         # Mock the LocalExecutionConfig to have a workspace_root
         with mock.patch.object(config.LocalExecutionConfig, 'instance') as mock_instance:
             mock_instance.workspace_root = '/tmp/docker-workspace'
