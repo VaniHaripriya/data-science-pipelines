@@ -354,13 +354,9 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     original_cron = getattr(getattr(getattr(original_recurring_run, 'trigger', {}), 'cron_schedule', {}), 'cron', None)
     current_cron = recurring_run.get('trigger', {}).get('cron_schedule', {}).get('cron')
     
-    # Validate cron schedule exists
-    if current_cron:
-        print(f"Cron schedule found: {current_cron}")
-        assert current_cron in ['0 0 * * *', original_cron], \
-            f"Cron schedule should be valid: got {current_cron}"
-    elif original_cron:
-        print(f"Note: Original cron {original_cron} not preserved in K8s mode")
+    # Validate cron schedule preservation
+    assert current_cron == original_cron, f"Cron schedule should be preserved: expected={original_cron}, got={current_cron}"
+    print(f"Cron schedule preserved: {current_cron}")
     
     # Validate recurring run structure matches original format
     if hasattr(recurring_run, 'keys'):
@@ -376,7 +372,7 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     if hasattr(original_recurring_run, '__dict__'):       
         original_object = serialize_object_for_comparison(original_recurring_run)
     else:
-        return  # Skip detailed comparison if object not available
+        return
     
     # Validate recurring run name preservation
     original_name = original_object.get('display_name')

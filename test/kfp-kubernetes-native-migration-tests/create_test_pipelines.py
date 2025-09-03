@@ -29,8 +29,7 @@ def serialize_object_for_comparison(obj):
     """Serialize KFP objects to JSON-serializable format for comparison."""
     if hasattr(obj, 'to_dict'):
         return obj.to_dict()
-    elif hasattr(obj, '__dict__'):
-        # Convert object attributes to dict, handling nested objects
+    elif hasattr(obj, '__dict__'):        
         result = {}
         for key, value in obj.__dict__.items():
             if hasattr(value, 'to_dict'):
