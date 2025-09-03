@@ -261,21 +261,6 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
     assert len(yaml_files) > 0, "Migration should create YAML files"    
     
     migrated_resources = parse_yaml_files(output_dir)
-    
-    # Debug: Print migrated resource counts
-    print(f"\nMigrated resources summary:")
-    print(f"- Pipelines: {len(migrated_resources['Pipeline'])}")
-    print(f"- PipelineVersions: {len(migrated_resources['PipelineVersion'])}")
-    print(f"- Experiments: {len(migrated_resources['Experiment'])}")
-    print(f"- Runs: {len(migrated_resources['Run'])}")
-    print(f"- RecurringRuns: {len(migrated_resources['RecurringRun'])}")
-    
-    # Debug: Print PipelineVersion details
-    print(f"\nPipelineVersion details:")
-    for i, version in enumerate(migrated_resources['PipelineVersion']):
-        name = version.get('metadata', {}).get('name', 'Unknown')
-        original_id = version.get('metadata', {}).get('annotations', {}).get('pipelines.kubeflow.org/original-id', 'Unknown')
-        print(f"  Version {i+1}: {name} (Original ID: {original_id})")
     original_pipeline = find_test_data_by_name(test_data, "pipelines", "add-numbers")
     pipelines = migrated_resources["Pipeline"]
     complex_pipeline_resources = [p for p in pipelines 
@@ -286,10 +271,10 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
     migrated_pipeline = complex_pipeline_resources[0]    
     compare_complete_objects(migrated_pipeline, original_pipeline, "Pipeline")
     
-    # Verify pipeline versions exist for add-numbers pipeline
     pipeline_versions = migrated_resources["PipelineVersion"]
+    
     complex_versions = [v for v in pipeline_versions 
-                      if "add-numbers" in v.get("metadata", {}).get("name", "")]
+                       if v.get("spec", {}).get("pipelineRef", {}).get("name") == "add-numbers"]
     assert len(complex_versions) >= 3, f"add-numbers pipeline should have at least 3 versions, found {len(complex_versions)}"
     
     print(f"Found {len(complex_versions)} versions for add-numbers pipeline")
@@ -335,14 +320,18 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
     hello_world_pipelines = [p for p in pipelines if "hello-world" in p.get("metadata", {}).get("name", "")]
     assert len(hello_world_pipelines) >= 1, "Should have hello-world pipeline"
     
-    hello_world_versions = [v for v in pipeline_versions if "hello-world" in v.get("metadata", {}).get("name", "")]
+    # Filter versions by pipeline reference
+    hello_world_versions = [v for v in pipeline_versions 
+                           if v.get("spec", {}).get("pipelineRef", {}).get("name") == "hello-world"]
     assert len(hello_world_versions) >= 1, "Hello-world should have at least 1 version"
     
     # Validate add-numbers pipeline and its multiple versions
     add_numbers_pipelines = [p for p in pipelines if "add-numbers" in p.get("metadata", {}).get("name", "")]
     assert len(add_numbers_pipelines) >= 1, "Should have add-numbers pipeline"
     
-    add_numbers_versions = [v for v in pipeline_versions if "add-numbers" in v.get("metadata", {}).get("name", "")]
+    # Filter versions by pipeline reference
+    add_numbers_versions = [v for v in pipeline_versions 
+                           if v.get("spec", {}).get("pipelineRef", {}).get("name") == "add-numbers"]
     assert len(add_numbers_versions) >= 3, f"Add-numbers should have at least 3 versions, found {len(add_numbers_versions)}"
    
     # Validate all pipelines against original data
