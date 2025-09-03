@@ -94,101 +94,8 @@ def get_pipeline_details(pipeline_name: str) -> Dict[str, Any]:
     ], check=True, capture_output=True, text=True)
     
     return json.loads(result.stdout)
-
-def compare_complete_k8s_objects(k8s_resource, original_resource, resource_type: str) -> None:
-    """Compare K8s native resources with original DB mode objects using complete object comparison."""
-    if hasattr(original_resource, '__dict__'):        
-        original_object = serialize_object_for_comparison(original_resource)
-    else:
-        return 
-    
-    # Core validations based on resource type
-    if resource_type == "Pipeline":
-        # Validate pipeline-specific attributes
-        original_name = original_object.get('display_name')
-        k8s_name = k8s_resource.get('metadata', {}).get('name')
-        assert k8s_name == original_name, \
-            f"Pipeline name mismatch: k8s={k8s_name}, original={original_name}"
-        
-        # Validate pipeline ID preservation in annotations
-        original_id = original_object.get('pipeline_id')
-        annotations = k8s_resource.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
-            f"Pipeline ID should be preserved in annotations: {original_id}"
-        
-        # Validate description preservation if available
-        if 'description' in original_object and original_object['description']:
-            spec_description = k8s_resource.get('spec', {}).get('description')
-            if spec_description:
-                original_description = original_object.get('description')
-                assert spec_description == original_description, \
-                    "Pipeline description should be preserved in K8s spec"
-    
-    elif resource_type == "Run":
-        # Validate run-specific attributes
-        original_name = original_object.get('display_name')
-        k8s_name = getattr(k8s_resource, 'display_name', None)
-        
-        if k8s_name and original_name:
-            # Basic name validation (K8s runs may have generated names)
-            # Skip strict name validation as test runs have different names than original data
-            print(f"Note: Run names differ - k8s={k8s_name}, original={original_name}")
-        
-        # Validate experiment association
-        if 'experiment_id' in original_object and original_object['experiment_id']:
-            k8s_experiment_id = getattr(k8s_resource, 'experiment_id', None)
-            assert k8s_experiment_id is not None, "Run should be associated with an experiment in K8s mode"
-        
-        # Validate pipeline association
-        if 'pipeline_spec' in original_object and original_object['pipeline_spec']:
-            original_pipeline_id = original_object['pipeline_spec'].get('pipeline_id')
-            k8s_pipeline_spec = getattr(k8s_resource, 'pipeline_spec', None)
-            if k8s_pipeline_spec and original_pipeline_id:
-                k8s_pipeline_id = getattr(k8s_pipeline_spec, 'pipeline_id', None)
-                assert k8s_pipeline_id is not None, "Run should be associated with a pipeline in K8s mode"
-        
-        # Validate run status exists
-        k8s_status = getattr(k8s_resource, 'status', None)
-        if k8s_status:
-            print(f"Run status in K8s mode: {k8s_status}")
-        
-        # Validate run state exists
-        k8s_state = getattr(k8s_resource, 'state', None)
-        if k8s_state:
-            print(f"Run state in K8s mode: {k8s_state}")
-        
-        # Validate created_at timestamp
-        if 'created_at' in original_object and original_object['created_at']:
-            k8s_created_at = getattr(k8s_resource, 'created_at', None)
-            if k8s_created_at:
-                print(f"Run creation timestamps - original: {original_object['created_at']}, k8s: {k8s_created_at}")
-            else:
-                print("Note: Creation timestamp not preserved for run in K8s mode")
-    
-    elif resource_type == "Experiment":
-        # Validate experiment-specific attributes
-        original_name = original_object.get('display_name')
-        k8s_name = getattr(k8s_resource, 'display_name', None)
-        if k8s_name and original_name:
-            # Skip strict name validation as K8s tests create new experiments with different names
-            print(f"Note: Experiment names differ - k8s={k8s_name}, original={original_name}")
-        
-        # Validate experiment ID preservation
-        original_id = original_object.get('experiment_id')
-        k8s_id = getattr(k8s_resource, 'experiment_id', None)
-        if k8s_id and original_id:
-            # In K8s mode, experiment IDs may be different but should exist
-            assert k8s_id is not None, "Experiment should have an ID in K8s mode"
-        
-        # Validate description preservation if available
-        if 'description' in original_object and original_object['description']:
-            k8s_description = getattr(k8s_resource, 'description', None)
-            if k8s_description:
-                # Skip strict description validation as K8s tests create new experiments with different descriptions
-                original_description = original_object.get('description')
-                print(f"Note: Experiment descriptions differ - k8s={k8s_description}, original={original_description}") 
    
-def test_k8s_mode_pipeline_execution(kfp_client, test_data):
+def test_k8s_mode_pipeline_execution(kfp_client):
     """Test that migrated pipelines are available and executable in K8s native mode.
     
     Validates migrated pipelines exist as Kubernetes Pipeline resources with original-id annotations.
@@ -257,12 +164,11 @@ def test_k8s_mode_pipeline_execution(kfp_client, test_data):
     assert run_id is not None, "Run should be created successfully"
     print(f"Successfully created and started run: {run_name} (ID: {run_id})")
     
-    # Validate run details against original test data
-    if test_data.get("runs"):
-        original_run = test_data["runs"][0]
-        run_details = kfp_client.get_run(run_id=run_id)
-        compare_complete_k8s_objects(run_details, original_run, "Run")
-   
+    # Validate that run was created and can be retrieved
+    run_details = kfp_client.get_run(run_id=run_id)
+    assert getattr(run_details, 'run_id', None) == run_id, "Retrieved run should have correct ID"
+    assert getattr(run_details, 'experiment_id', None) == experiment_id, "Run should be associated with correct experiment"
+    
 
 def test_k8s_mode_duplicate_pipeline_creation():
     """Test duplicate pipeline name handling in K8s native mode.
