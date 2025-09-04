@@ -718,8 +718,7 @@ class TestRunLocalPipeline(testing_utilities.LocalRunnerEnvironmentTestCase):
             self.assertEqual(task.output, 'Test workspace functionality!')
             self.assert_output_dir_contents(1, 2)
 
-    def test_docker_runner_workspace_functionality(self):
-        """Test that DockerRunner properly supports workspace functionality."""
+    def test_docker_runner_workspace_functionality(self):        
         import tempfile
 
         # Create temporary directory for workspace
@@ -728,30 +727,18 @@ class TestRunLocalPipeline(testing_utilities.LocalRunnerEnvironmentTestCase):
             os.makedirs(workspace_root, exist_ok=True)
 
             # Test that DockerRunner can be initialized with workspace
-            try:
-                local.init(
-                    local.DockerRunner(),
-                    pipeline_root=ROOT_FOR_TESTING,
-                    workspace_root=workspace_root)
+            local.init(
+                local.DockerRunner(),
+                pipeline_root=ROOT_FOR_TESTING,
+                workspace_root=workspace_root)
 
-                # Verify that the workspace is properly configured
-                self.assertEqual(
-                    local.config.LocalExecutionConfig.instance.workspace_root,
-                    workspace_root)
-                self.assertEqual(
-                    type(local.config.LocalExecutionConfig.instance.runner),
-                    local.DockerRunner)
-
-                print(
-                    f"✓ DockerRunner initialized with workspace: {workspace_root}"
-                )
-
-            except Exception as e:
-                # If Docker is not available, skip the test
-                if "docker" in str(e).lower() or "permission" in str(e).lower():
-                    self.skipTest(f"Docker not available: {e}")
-                else:
-                    raise
+            # Verify that the workspace is properly configured
+            self.assertEqual(
+                local.config.LocalExecutionConfig.instance.workspace_root,
+                workspace_root)
+            self.assertEqual(
+                type(local.config.LocalExecutionConfig.instance.runner),
+                local.DockerRunner)
 
 
 class TestFstringContainerComponent(
