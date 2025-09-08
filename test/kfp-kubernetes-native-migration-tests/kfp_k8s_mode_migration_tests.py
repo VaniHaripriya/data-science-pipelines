@@ -371,7 +371,8 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     print(f"original_resource type: {type(original_recurring_run)}")
     print(f"original_resource has __dict__: {hasattr(original_recurring_run, '__dict__')}")
     print(f"original_resource has to_dict(): {hasattr(original_recurring_run, 'to_dict')}")
-    
+    print(f"original_resource.to_dict(): {original_recurring_run.to_dict()}")
+    print(f"original_resource: {original_recurring_run}")
     # Enhanced validation using complete object comparison
     if hasattr(original_recurring_run, '__dict__'):       
         original_object = serialize_object_for_comparison(original_recurring_run)

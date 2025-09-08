@@ -122,7 +122,8 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
     print(f"original_resource type: {type(original_resource)}")
     print(f"original_resource has __dict__: {hasattr(original_resource, '__dict__')}")
     print(f"original_resource has to_dict(): {hasattr(original_resource, 'to_dict')}")
-    
+    print(f"original_resource.to_dict(): {original_resource.to_dict()}")
+    print(f"original_resource: {original_resource}")
     # Serialize KFP client object for comparison
     if hasattr(original_resource, '__dict__'):
         original_object = serialize_object_for_comparison(original_resource)
