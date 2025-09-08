@@ -35,15 +35,31 @@ class DockerTaskHandler(task_handler_interface.ITaskHandler):
         self.runner = runner
 
     def get_volumes_to_mount(self) -> Dict[str, Any]:
-        """Gets the volume configuration to mount the pipeline root to the
-        container so that outputs can be obtained outside of the container."""
+        """Gets the volume configuration to mount the pipeline root and
+        workspace to the container so that outputs and workspace can be
+        accessed outside of the container."""
         if not os.path.isabs(self.pipeline_root):
             # defensive check. this is enforced by upstream code.
             # users should not hit this,
             raise ValueError(
                 "'pipeline_root' should be an absolute path to correctly construct the volume mount specification."
             )
-        return {self.pipeline_root: {'bind': self.pipeline_root, 'mode': 'rw'}}
+        
+        volumes = {self.pipeline_root: {'bind': self.pipeline_root, 'mode': 'rw'}}
+        
+        # Add workspace volume mount if workspace is configured
+        if (config.LocalExecutionConfig.instance and 
+            config.LocalExecutionConfig.instance.workspace_root):
+            workspace_root = config.LocalExecutionConfig.instance.workspace_root
+            if os.path.isabs(workspace_root):
+                # Mount workspace to the standard KFP workspace path
+                volumes[workspace_root] = {'bind': '/kfp-workspace', 'mode': 'rw'}
+            else:
+                # If workspace_root is relative, make it absolute relative to current working directory
+                abs_workspace_root = os.path.abspath(workspace_root)
+                volumes[abs_workspace_root] = {'bind': '/kfp-workspace', 'mode': 'rw'}
+        
+        return volumes
 
     def run(self) -> status.Status:
         """Runs the Docker container and returns the status."""

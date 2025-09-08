@@ -17,6 +17,7 @@ import json
 import os
 from typing import List, Optional
 import unittest
+from unittest import mock
 
 from absl.testing import parameterized
 from google.protobuf import json_format
@@ -525,29 +526,60 @@ class TestWorkspacePlaceholderResolution(unittest.TestCase):
     def test_workspace_configured_resolves(self):
         """Test that workspace placeholder resolves when workspace is
         configured."""
-        executor_input_dict = {
-            'inputs': {
-                'parameterValues': {
-                    'workspace_path': '{{$.workspace_path}}'
+        from kfp.local import config
+
+        # Mock the LocalExecutionConfig to have a workspace_root
+        with mock.patch.object(config.LocalExecutionConfig, 'instance') as mock_instance:
+            mock_instance.workspace_root = '/tmp/test-workspace'
+            
+            executor_input_dict = {
+                'outputs': {
+                    'outputFile': '/tmp/outputs/output.txt'
                 }
-            },
-            'outputs': {
-                'outputFile': '/tmp/outputs/output.txt'
             }
-        }
+            
+            result = placeholder_utils.resolve_individual_placeholder(
+                element='{{$.workspace_path}}',
+                executor_input_dict=executor_input_dict,
+                pipeline_resource_name='test-pipeline',
+                task_resource_name='test-task',
+                pipeline_root='/tmp/pipeline',
+                pipeline_job_id='test-job-id',
+                pipeline_task_id='test-task-id')
+            
+            self.assertEqual(result, '/tmp/test-workspace')
 
-        result = placeholder_utils.resolve_individual_placeholder(
-            element='{{$.workspace_path}}',
-            executor_input_dict=executor_input_dict,
-            pipeline_resource_name='test-pipeline',
-            task_resource_name='test-task',
-            pipeline_root='/tmp/pipeline',
-            pipeline_job_id='test-job-id',
-            pipeline_task_id='test-task-id')
+    def test_docker_runner_workspace_placeholder_resolution(self):
+        """Test that workspace placeholder resolution works correctly for
+        DockerRunner."""
+        from kfp.local import config
 
-        # Should resolve to actual workspace path
-        self.assertIsInstance(result, str)
-        self.assertTrue(result.startswith('/tmp/kfp-workspace-'))
+        # Mock the LocalExecutionConfig to have a workspace_root
+        with mock.patch.object(config.LocalExecutionConfig, 'instance') as mock_instance:
+            mock_instance.workspace_root = '/tmp/docker-workspace'
+            
+            executor_input_dict = {
+                'inputs': {
+                    'parameterValues': {
+                        'workspace_path': '{{$.workspace_path}}'
+                    }
+                },
+                'outputs': {
+                    'outputFile': '/tmp/outputs/output.txt'
+                }
+            }
+
+            result = placeholder_utils.resolve_individual_placeholder(
+                element='{{$.workspace_path}}',
+                executor_input_dict=executor_input_dict,
+                pipeline_resource_name='test-pipeline',
+                task_resource_name='test-task',
+                pipeline_root='/tmp/pipeline',
+                pipeline_job_id='test-job-id',
+                pipeline_task_id='test-task-id')
+
+            self.assertEqual(result, '/tmp/docker-workspace')
+            self.assertTrue(result.startswith('/tmp/docker-workspace'))
 
 
 if __name__ == '__main__':
