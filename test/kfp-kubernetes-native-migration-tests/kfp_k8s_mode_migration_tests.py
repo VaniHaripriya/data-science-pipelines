@@ -367,6 +367,10 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
             field_exists = (field in current_structure_keys or 
                           any(field in k for k in current_structure_keys))
             assert field_exists, f"Key field {field} should be preserved in recurring run structure"
+    print(f"\n=== DEBUG INFO for RecurringRun ===")
+    print(f"original_resource type: {type(original_recurring_run)}")
+    print(f"original_resource has __dict__: {hasattr(original_recurring_run, '__dict__')}")
+    print(f"original_resource has to_dict(): {hasattr(original_recurring_run, 'to_dict')}")
     
     # Enhanced validation using complete object comparison
     if hasattr(original_recurring_run, '__dict__'):       

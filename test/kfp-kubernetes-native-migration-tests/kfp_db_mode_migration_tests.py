@@ -118,6 +118,11 @@ def find_test_data_by_name(test_data: Dict[str, Any], resource_type: str, name: 
 
 def compare_complete_objects(migrated_resource: Dict[str, Any], original_resource, resource_type: str) -> None:
     
+    print(f"\n=== DEBUG INFO for {resource_type} ===")
+    print(f"original_resource type: {type(original_resource)}")
+    print(f"original_resource has __dict__: {hasattr(original_resource, '__dict__')}")
+    print(f"original_resource has to_dict(): {hasattr(original_resource, 'to_dict')}")
+    
     # Serialize KFP client object for comparison
     if hasattr(original_resource, '__dict__'):
         original_object = serialize_object_for_comparison(original_resource)
