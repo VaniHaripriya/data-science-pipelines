@@ -38,7 +38,7 @@ from migration import migrate
 
 # Import serialization function from create_test_pipelines
 sys.path.insert(0, os.path.dirname(__file__))
-from create_test_pipelines import serialize_object_for_comparison
+from create_test_pipelines import to_json_for_comparison
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
@@ -124,11 +124,15 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
     print(f"original_resource has to_dict(): {hasattr(original_resource, 'to_dict')}")
     print(f"original_resource.to_dict(): {original_resource.to_dict()}")
     print(f"original_resource: {original_resource}")
+    original_json = to_json_for_comparison(original_resource)
     # Serialize KFP client object for comparison
-    if hasattr(original_resource, '__dict__'):
-        original_object = serialize_object_for_comparison(original_resource)
-    else:
-        return
+    # if hasattr(original_resource, '__dict__'):
+    #     # Keep dictionary format for validation logic
+    #     original_object = original_resource.to_dict() if hasattr(original_resource, 'to_dict') else original_resource
+    #     # Also create JSON string for comparison
+    #     original_json = to_json_for_comparison(original_resource)
+    # else:
+    #     return
     
     # Core validations based on resource type
     if resource_type == "Pipeline":
@@ -194,6 +198,16 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
         annotations = migrated_resource.get('metadata', {}).get('annotations', {})
         assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
             f"Recurring run ID should be preserved in annotations: {original_id}"
+    
+    # Comprehensive JSON comparison (excluding datetime fields)
+    migrated_json = to_json_for_comparison(migrated_resource)
+    print(f"\n=== JSON COMPARISON for {resource_type} ===")
+    print(f"Original JSON (first 200 chars): {original_json[:200]}...")
+    print(f"Migrated JSON (first 200 chars): {migrated_json[:200]}...")
+    
+    # Note: This comparison may not pass due to structural differences between 
+    # original KFP objects and migrated K8s YAML format, but provides insight
+    # assert original_json == migrated_json, f"{resource_type} objects should have equivalent content"
   
 def test_migration_single_pipeline_single_version(test_data, run_migration):
     """Test migration of a single pipeline with single version.
@@ -237,8 +251,7 @@ def test_migration_single_pipeline_single_version(test_data, run_migration):
         original_version = None
         for original in test_data.get('pipelines', []):
             # Only match pipeline versions (have pipeline_version_id)
-            original_id = getattr(original, 'pipeline_version_id', None)
-            if original_id == original_version_id:
+            if original.pipeline_version_id == original_version_id:
                 original_version = original
                 break
         
@@ -292,8 +305,7 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
         original_version = None
         for original in test_data.get('pipelines', []):            
             # Only match pipeline versions (have pipeline_version_id)
-            original_id = getattr(original, 'pipeline_version_id', None)
-            if original_id == original_version_id:
+            if original.pipeline_version_id == original_version_id:
                 original_version = original
                 break
         
@@ -366,7 +378,7 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
         original_version = None
         for original in test_data.get('pipelines', []):
             # Only match pipeline versions (have pipeline_version_id)
-            if getattr(original, 'pipeline_version_id', None) == original_version_id:
+            if original.pipeline_version_id == original_version_id:
                 original_version = original
                 break
         

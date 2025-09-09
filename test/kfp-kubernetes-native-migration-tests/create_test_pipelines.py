@@ -19,28 +19,28 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from datetime import datetime
 import kfp
 from kfp.client import Client
 
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
-def serialize_object_for_comparison(obj):
-    """Serialize KFP objects to JSON-serializable format for comparison."""
-    if hasattr(obj, 'to_dict'):
-        return obj.to_dict()
-    elif hasattr(obj, '__dict__'):        
-        result = {}
-        for key, value in obj.__dict__.items():
-            if hasattr(value, 'to_dict'):
-                result[key] = value.to_dict()
-            elif hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, type(None))):
-                result[key] = serialize_object_for_comparison(value)
-            else:
-                result[key] = value
-        return result
-    else:
-        return str(obj)
+def to_json_for_comparison(obj):
+    """Convert object to JSON string for comparison."""
+    data = obj.to_dict()
+    # if hasattr(obj, 'to_dict'):
+    #     data = obj.to_dict()
+    # else:
+    #     data = obj
+    
+    # # Remove datetime fields that we don't want to compare
+    # if isinstance(data, dict):
+    #     datetime_fields = ['created_at', 'updated_at', 'update_time']
+    #     data = {k: v for k, v in data.items() 
+    #             if k not in datetime_fields and not isinstance(v, datetime)}
+    
+    return json.dumps(data, sort_keys=True, indent=2)
 
 # Pipeline files to use for testing
 PIPELINE_FILES = [
@@ -99,7 +99,7 @@ def create_experiment(name, description):
         name=name,
         description=description
     )
-    experiment_id = getattr(experiment, 'experiment_id', None)
+    experiment_id = experiment.experiment_id
 
     # Retrieve the complete experiment object from the database
     complete_experiment = client.get_experiment(experiment_id)
@@ -124,7 +124,7 @@ def create_run(experiment_id, pipeline_id, pipeline_version_id, name, parameters
         version_id=pipeline_version_id,
         params=run_params
     )
-    run_id = getattr(run_data, 'run_id', None)
+    run_id = run_data.run_id
 
     # Retrieve the complete run object from the database
     complete_run = client.get_run(run_id)
@@ -150,7 +150,7 @@ def create_recurring_run(experiment_id, pipeline_id, pipeline_version_id, name, 
         cron_expression=cron_expression,
         params=run_params
     )       
-    recurring_run_id = getattr(recurring_run_data, 'recurring_run_id', None)
+    recurring_run_id = recurring_run_data.recurring_run_id
 
     # Retrieve the complete recurring run object from the database
     complete_recurring_run = client.get_recurring_run(recurring_run_id)

@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Dict, List, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from create_test_pipelines import serialize_object_for_comparison
+from create_test_pipelines import to_json_for_comparison
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
@@ -116,7 +116,7 @@ def test_k8s_mode_pipeline_execution(kfp_client):
         name="k8s-execution-test-experiment",
         description="Test experiment for K8s mode pipeline execution"
     )
-    experiment_id = getattr(experiment, 'experiment_id', None)
+    experiment_id = experiment.experiment_id
     assert experiment_id is not None, "Experiment should be created successfully"
     
     # Get pipeline
@@ -132,7 +132,7 @@ def test_k8s_mode_pipeline_execution(kfp_client):
     
     assert migrated_pipeline is not None, f"Pipeline {first_pipeline_name} should be discoverable via KFP client"
     
-    pipeline_id = getattr(migrated_pipeline, 'pipeline_id', None)
+    pipeline_id = migrated_pipeline.pipeline_id
     assert pipeline_id is not None, "Pipeline should have an ID"
     
     # Get pipeline versions
@@ -141,7 +141,7 @@ def test_k8s_mode_pipeline_execution(kfp_client):
     assert len(version_list) > 0, "Pipeline should have at least one version"
     
     migrated_version = version_list[0]
-    version_id = getattr(migrated_version, 'pipeline_version_id', None)
+    version_id = migrated_version.pipeline_version_id
     assert version_id is not None, "Pipeline version should have an ID"
     
     # Create and execute a run
@@ -158,16 +158,16 @@ def test_k8s_mode_pipeline_execution(kfp_client):
         params=test_params
     )
     
-    run_id = getattr(run_data, 'run_id', None)
-    run_name = getattr(run_data, 'display_name', None) or "k8s-execution-test-run"
+    run_id = run_data.run_id
+    run_name = run_data.display_name or "k8s-execution-test-run"
     
     assert run_id is not None, "Run should be created successfully"
     print(f"Successfully created and started run: {run_name} (ID: {run_id})")
     
     # Validate that run was created and can be retrieved
     run_details = kfp_client.get_run(run_id=run_id)
-    assert getattr(run_details, 'run_id', None) == run_id, "Retrieved run should have correct ID"
-    assert getattr(run_details, 'experiment_id', None) == experiment_id, "Run should be associated with correct experiment"
+    assert run_details.run_id == run_id, "Retrieved run should have correct ID"
+    assert run_details.experiment_id == experiment_id, "Run should be associated with correct experiment"
     
 
 def test_k8s_mode_duplicate_pipeline_creation():
@@ -246,8 +246,8 @@ def test_k8s_mode_experiment_creation(kfp_client):
         description="Test experiment created in K8s mode"
     )
     
-    experiment_id = getattr(experiment, 'experiment_id', None)
-    experiment_name = getattr(experiment, 'display_name', None)
+    experiment_id = experiment.experiment_id
+    experiment_name = experiment.display_name
     
     assert experiment_id is not None, "Experiment should have an ID"
     assert experiment_name == "k8s-mode-test-experiment", "Experiment name should match input"
@@ -268,7 +268,7 @@ def test_k8s_mode_experiment_creation(kfp_client):
     
     assert target_pipeline is not None, "Should find hello-world pipeline for testing"
     
-    pipeline_id = getattr(target_pipeline, 'pipeline_id', None)
+    pipeline_id = target_pipeline.pipeline_id
     assert pipeline_id is not None, "Pipeline should have an ID"
     
     # Get pipeline versions
@@ -277,7 +277,7 @@ def test_k8s_mode_experiment_creation(kfp_client):
     assert len(version_list) > 0, "Pipeline should have at least one version"
     
     version = version_list[0]
-    version_id = getattr(version, 'pipeline_version_id', None)
+    version_id = version.pipeline_version_id
     assert version_id is not None, "Pipeline version should have an ID"
     
     # Create run
@@ -288,8 +288,8 @@ def test_k8s_mode_experiment_creation(kfp_client):
         version_id=version_id
     )
     
-    run_id = getattr(run_data, 'run_id', None)
-    run_name = getattr(run_data, 'display_name', None)
+    run_id = run_data.run_id
+    run_name = run_data.display_name
     
     assert run_id is not None, "Run should be created successfully"
     assert run_name == "k8s-mode-test-run", "Run name should match input"
@@ -298,16 +298,16 @@ def test_k8s_mode_experiment_creation(kfp_client):
     
     # Validate experiment structure
     experiment_details = kfp_client.get_experiment(experiment_id=experiment_id)
-    assert getattr(experiment_details, 'experiment_id', None) == experiment_id, "Experiment should have correct ID"
-    assert getattr(experiment_details, 'display_name', None) == experiment_name, "Experiment should have correct name"
+    assert experiment_details.experiment_id == experiment_id, "Experiment should have correct ID"
+    assert experiment_details.display_name == experiment_name, "Experiment should have correct name"
     experiment_description = getattr(experiment_details, 'description', None)
     assert experiment_description == "Test experiment created in K8s mode", "Experiment should have correct description"
     
     # Validate run structure
     run_details = kfp_client.get_run(run_id=run_id)
-    assert getattr(run_details, 'run_id', None) == run_id, "Run should have correct ID"
-    assert getattr(run_details, 'display_name', None) == run_name, "Run should have correct name"
-    assert getattr(run_details, 'experiment_id', None) == experiment_id, "Run should be associated with correct experiment"
+    assert run_details.run_id == run_id, "Run should have correct ID"
+    assert run_details.display_name == run_name, "Run should have correct name"
+    assert run_details.experiment_id == experiment_id, "Run should be associated with correct experiment"
       
     run_state = getattr(run_details, 'state', None)   
     assert run_state is not None, "Run should have state information"
@@ -373,11 +373,15 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     print(f"original_resource has to_dict(): {hasattr(original_recurring_run, 'to_dict')}")
     print(f"original_resource.to_dict(): {original_recurring_run.to_dict()}")
     print(f"original_resource: {original_recurring_run}")
+    original_json = to_json_for_comparison(original_recurring_run)
     # Enhanced validation using complete object comparison
-    if hasattr(original_recurring_run, '__dict__'):       
-        original_object = serialize_object_for_comparison(original_recurring_run)
-    else:
-        return
+    # if hasattr(original_recurring_run, '__dict__'):       
+    #     # Keep dictionary format for validation logic
+    #     original_object = original_recurring_run.to_dict() if hasattr(original_recurring_run, 'to_dict') else original_recurring_run
+    #     # Also create JSON string for comparison
+    #     original_json = to_json_for_comparison(original_recurring_run)
+    # else:
+    #     return
     
     # Validate recurring run name preservation
     original_name = original_object.get('display_name')
