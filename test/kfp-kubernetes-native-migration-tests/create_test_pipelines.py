@@ -28,17 +28,26 @@ KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
 def to_json_for_comparison(obj):
     """Convert object to JSON string for comparison."""
-    data = obj.to_dict()
-    # if hasattr(obj, 'to_dict'):
-    #     data = obj.to_dict()
-    # else:
-    #     data = obj
+    import datetime
     
-    # Remove datetime fields that we don't want to compare
-    if isinstance(data, dict):
-        datetime_fields = ['created_at', 'updated_at', 'update_time']
-        data = {k: v for k, v in data.items() 
-                if k not in datetime_fields and not isinstance(v, datetime)}
+    def convert_datetime_to_string(data):
+        """Recursively convert datetime objects to strings."""
+        if isinstance(data, datetime.datetime):
+            return data.isoformat()
+        elif isinstance(data, dict):
+            return {k: convert_datetime_to_string(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [convert_datetime_to_string(item) for item in data]
+        else:
+            return data
+    
+    if hasattr(obj, 'to_dict'):
+        data = obj.to_dict()
+    else:
+        data = obj
+    
+    # Convert datetime objects to strings for JSON serialization
+    data = convert_datetime_to_string(data)
     
     return json.dumps(data, sort_keys=True, indent=2)
 
