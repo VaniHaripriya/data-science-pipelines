@@ -125,12 +125,12 @@ def compare_complete_objects(migrated_resource: Dict[str, Any], original_resourc
     print(f"original_resource.to_dict(): {original_resource.to_dict()}")
     print(f"original_resource: {original_resource}")
     original_json = to_json_for_comparison(original_resource)
-    # Serialize KFP client object for comparison
+    original_object = original_resource.to_dict()
+    
+    # # Serialize KFP client object for comparison
     # if hasattr(original_resource, '__dict__'):
     #     # Keep dictionary format for validation logic
     #     original_object = original_resource.to_dict() if hasattr(original_resource, 'to_dict') else original_resource
-    #     # Also create JSON string for comparison
-    #     original_json = to_json_for_comparison(original_resource)
     # else:
     #     return
     
