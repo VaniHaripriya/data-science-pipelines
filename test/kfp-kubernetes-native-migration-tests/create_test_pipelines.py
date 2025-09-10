@@ -34,11 +34,11 @@ def to_json_for_comparison(obj):
     # else:
     #     data = obj
     
-    # # Remove datetime fields that we don't want to compare
-    # if isinstance(data, dict):
-    #     datetime_fields = ['created_at', 'updated_at', 'update_time']
-    #     data = {k: v for k, v in data.items() 
-    #             if k not in datetime_fields and not isinstance(v, datetime)}
+    # Remove datetime fields that we don't want to compare
+    if isinstance(data, dict):
+        datetime_fields = ['created_at', 'updated_at', 'update_time']
+        data = {k: v for k, v in data.items() 
+                if k not in datetime_fields and not isinstance(v, datetime)}
     
     return json.dumps(data, sort_keys=True, indent=2)
 
