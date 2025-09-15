@@ -374,14 +374,16 @@ def test_k8s_mode_recurring_run_continuation(api_base, test_data):
     print(f"original_resource.to_dict(): {original_recurring_run.to_dict()}")
     print(f"original_resource: {original_recurring_run}")
     original_json = to_json_for_comparison(original_recurring_run)
-    # Enhanced validation using complete object comparison
-    # if hasattr(original_recurring_run, '__dict__'):       
-    #     # Keep dictionary format for validation logic
-    #     original_object = original_recurring_run.to_dict() if hasattr(original_recurring_run, 'to_dict') else original_recurring_run
-    #     # Also create JSON string for comparison
-    #     original_json = to_json_for_comparison(original_recurring_run)
-    # else:
-    #     return
+    original_object = original_recurring_run.to_dict()
+    
+    # # Enhanced validation using complete object comparison
+    # # if hasattr(original_recurring_run, '__dict__'):       
+    # #     # Keep dictionary format for validation logic
+    # #     original_object = original_recurring_run.to_dict() if hasattr(original_recurring_run, 'to_dict') else original_recurring_run
+    # #     # Also create JSON string for comparison
+    # #     original_json = to_json_for_comparison(original_recurring_run)
+    # # else:
+    # #     return
     
     # Validate recurring run name preservation
     original_name = original_object.get('display_name')
