@@ -251,7 +251,8 @@ def test_migration_single_pipeline_single_version(test_data, run_migration):
         original_version = None
         for original in test_data.get('pipelines', []):
             # Only match pipeline versions (have pipeline_version_id)
-            if original.pipeline_version_id == original_version_id:
+            if (hasattr(original, 'pipeline_version_id') and 
+                getattr(original, 'pipeline_version_id', None) == original_version_id):
                 original_version = original
                 break
         
@@ -305,7 +306,8 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
         original_version = None
         for original in test_data.get('pipelines', []):            
             # Only match pipeline versions (have pipeline_version_id)
-            if original.pipeline_version_id == original_version_id:
+            if (hasattr(original, 'pipeline_version_id') and 
+                getattr(original, 'pipeline_version_id', None) == original_version_id):
                 original_version = original
                 break
         
@@ -378,7 +380,8 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
         original_version = None
         for original in test_data.get('pipelines', []):
             # Only match pipeline versions (have pipeline_version_id)
-            if original.pipeline_version_id == original_version_id:
+            if (hasattr(original, 'pipeline_version_id') and 
+                getattr(original, 'pipeline_version_id', None) == original_version_id):
                 original_version = original
                 break
         
