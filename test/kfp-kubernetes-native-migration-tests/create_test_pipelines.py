@@ -50,12 +50,12 @@ def to_json_for_comparison(obj):
 PIPELINE_FILES = [
     {
         "name": "hello-world", 
-        "path": "test_data/pipeline_files/valid/critical/hello-world.yaml",
+        "path": "test_data/pipeline_files/valid/hello-world.yaml",
         "description": "Simple hello world pipeline for migration testing"
     },
     {
         "name": "add-numbers",
-        "path": "test_data/pipeline_files/valid/add_numbers.yaml", 
+        "path": "test_data/pipeline_files/valid/critical/add_numbers.yaml", 
         "description": "Simple arithmetic pipeline with parameters for migration testing"
     }
 ]
@@ -215,7 +215,7 @@ def main():
     version2_v3 = create_pipeline_version(
         pipeline2.pipeline_id, 
         "v3", 
-        "test_data/pipeline_files/valid/two_step_pipeline.yaml"
+        "test_data/pipeline_files/valid/critical/two_step_pipeline_containerized.yaml"
     )    
     test_data["pipelines"].append(version2_v3)
     print(f"Created pipeline version: {version2_v3.display_name} (ID: {version2_v3.pipeline_version_id})")

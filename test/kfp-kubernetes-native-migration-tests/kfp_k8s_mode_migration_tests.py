@@ -30,10 +30,11 @@ from kfp.client import Client
 import pytest
 import yaml
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from create_test_pipelines import to_json_for_comparison
+from k8s_models import K8sMetadata, K8sPipeline, K8sPipelineVersion
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
 
@@ -94,6 +95,58 @@ def get_pipeline_details(pipeline_name: str) -> Dict[str, Any]:
     ], check=True, capture_output=True, text=True)
     
     return json.loads(result.stdout)
+
+
+def _to_metadata(meta: Dict[str, Any]) -> K8sMetadata:
+    return K8sMetadata(
+        name=meta.get('name', ''),
+        namespace=meta.get('namespace', ''),
+        annotations=meta.get('annotations', {}) or {},
+        labels=meta.get('labels', {}) or {},
+        creationTimestamp=meta.get('creationTimestamp'),
+        uid=meta.get('uid')
+    )
+
+
+def get_pipeline_resource(pipeline_name: str) -> K8sPipeline:    
+    raw = get_pipeline_details(pipeline_name)
+    return K8sPipeline(
+        apiVersion=raw.get('apiVersion', ''),
+        kind=raw.get('kind', 'Pipeline'),
+        metadata=_to_metadata(raw.get('metadata', {})),
+        spec=raw.get('spec', {}) or {}
+    )
+
+
+def list_pipeline_versions_objects() -> List[K8sPipelineVersion]:    
+    result = subprocess.run([
+        'kubectl', 'get', 'pipelineversion', '-n', 'kubeflow', '-o', 'json'
+    ], check=True, capture_output=True, text=True)
+    data = json.loads(result.stdout)
+    items = data.get('items', [])
+    versions: List[K8sPipelineVersion] = []
+    for item in items:
+        versions.append(
+            K8sPipelineVersion(
+                apiVersion=item.get('apiVersion', ''),
+                kind=item.get('kind', 'PipelineVersion'),
+                metadata=_to_metadata(item.get('metadata', {})),
+                spec=item.get('spec', {}) or {}
+            )
+        )
+    return versions
+
+
+def get_pipeline_versions_for_pipeline(pipeline_name: str) -> List[K8sPipelineVersion]:
+    """Filter PipelineVersion objects belonging to a given Pipeline name."""
+    all_versions = list_pipeline_versions_objects()
+    filtered: List[K8sPipelineVersion] = []
+    for v in all_versions:
+        spec = v.get_pipeline_spec() or {}
+        info = spec.get('pipelineInfo', {})
+        if info.get('name') == pipeline_name:
+            filtered.append(v)
+    return filtered
    
 def test_k8s_mode_pipeline_execution(kfp_client):
     """Test that migrated pipelines are available and executable in K8s native mode.
@@ -108,7 +161,20 @@ def test_k8s_mode_pipeline_execution(kfp_client):
     
     print(f"Found {len(migrated_pipelines)} migrated pipelines: {migrated_pipelines}")
    
-    first_pipeline_name = migrated_pipelines[0]    
+    first_pipeline_name = migrated_pipelines[0]
+   
+    migrated_pipeline_obj = get_pipeline_resource(first_pipeline_name)
+    assert migrated_pipeline_obj.get_name() == first_pipeline_name
+    assert migrated_pipeline_obj.get_original_id() is not None and migrated_pipeline_obj.get_original_id() != "", \
+        "Migrated pipeline should have original-id annotation"
+    
+    k8s_versions = get_pipeline_versions_for_pipeline(first_pipeline_name)
+    assert len(k8s_versions) > 0, f"Pipeline {first_pipeline_name} should have at least one PipelineVersion"
+    first_version = k8s_versions[0]
+    assert first_version.get_original_id() is not None and first_version.get_original_id() != "", \
+        "PipelineVersion should have original-id annotation"
+    spec = first_version.get_pipeline_spec()
+    assert spec is not None and 'pipelineInfo' in spec, "PipelineVersion should contain pipelineSpec with pipelineInfo"
     
     # Test pipeline execution
     experiment = kfp_client.create_experiment(
@@ -266,6 +332,18 @@ def test_k8s_mode_experiment_creation(kfp_client):
             break
     
     assert target_pipeline is not None, "Should find hello-world pipeline for testing"
+    
+    k8s_pipeline_obj = get_pipeline_resource("hello-world")
+    assert k8s_pipeline_obj.get_original_id() is not None and k8s_pipeline_obj.get_original_id() != "", \
+        "hello-world pipeline should carry original-id annotation"
+  
+    hv_versions = get_pipeline_versions_for_pipeline("hello-world")
+    assert len(hv_versions) > 0, "hello-world should have at least one PipelineVersion in K8s mode"
+    hv_first = hv_versions[0]
+    assert hv_first.get_original_id() is not None and hv_first.get_original_id() != "", \
+        "hello-world PipelineVersion should carry original-id annotation"
+    hv_spec = hv_first.get_pipeline_spec()
+    assert hv_spec is not None and 'pipelineInfo' in hv_spec, "hello-world PipelineVersion should contain pipelineSpec with pipelineInfo"
     
     pipeline_id = target_pipeline.pipeline_id
     assert pipeline_id is not None, "Pipeline should have an ID"

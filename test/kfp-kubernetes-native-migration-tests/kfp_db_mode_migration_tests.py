@@ -29,7 +29,8 @@ import pytest
 import yaml
 from pathlib import Path
 from unittest.mock import patch
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, field
 
 # Add the tools directory to path to import migration module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../tools/k8s-native'))
@@ -41,6 +42,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 from create_test_pipelines import to_json_for_comparison
 
 KFP_ENDPOINT = os.environ.get('KFP_ENDPOINT', 'http://localhost:8888')
+
+
+from k8s_models import K8sPipeline, K8sPipelineVersion, MigrationResult
+from yaml_converters import parse_yaml_files_to_objects
 
 
 @pytest.fixture(scope="session")
@@ -91,21 +96,7 @@ def run_migration(migration_output_dir):
     
     return migration_output_dir
 
-def parse_yaml_files(output_dir: Path) -> Dict[str, List[Dict[str, Any]]]:
-    """Parse all YAML files in the output directory and group by kind."""
-    resources = {"Pipeline": [], "PipelineVersion": [], "Experiment": [], "Run": [], "RecurringRun": []}
-    
-    for yaml_file in output_dir.glob("*.yaml"):
-        with open(yaml_file) as f:
-            docs = list(yaml.safe_load_all(f))
-            for doc in docs:
-                if doc and 'kind' in doc:
-                    kind = doc['kind']
-                    if kind in resources:
-                        resources[kind].append(doc)
-    
-    return resources
-
+ 
 def find_test_data_by_name(test_data: Dict[str, Any], resource_type: str, name: str):
     """Find a resource in test data by name."""
     resources = test_data.get(resource_type, [])
@@ -115,76 +106,6 @@ def find_test_data_by_name(test_data: Dict[str, Any], resource_type: str, name: 
             return resource
     pytest.fail(f"Test data should contain {resource_type} with name containing '{name}'")
 
-
-def compare_complete_objects(migrated_resource: Dict[str, Any], original_resource, resource_type: str) -> None:
-    
-    original_json = to_json_for_comparison(original_resource)
-    original_object = original_resource.to_dict()  
-    
-    # Core validations based on resource type
-    if resource_type == "Pipeline":
-        # Validate pipeline-specific attributes
-        original_name = original_object.get('display_name')
-        migrated_name = migrated_resource.get('metadata', {}).get('name')
-        assert migrated_name == original_name, \
-            f"Pipeline name mismatch: migrated={migrated_name}, original={original_name}"
-        
-        # Validate pipeline ID preservation in annotations
-        original_id = original_object.get('pipeline_id')
-        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
-            f"Pipeline ID should be preserved in annotations: {original_id}"
-    
-    elif resource_type == "PipelineVersion":
-        # Validate pipeline version-specific attributes
-        original_name = original_object.get('display_name')
-        migrated_name = migrated_resource.get('metadata', {}).get('name')
-        
-        # Validate version ID preservation in annotations
-        original_id = original_object.get('pipeline_version_id')
-        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
-            f"Pipeline version ID should be preserved in annotations: {original_id}"
-        
-        # Validate pipeline spec preservation
-        if (hasattr(original_object, 'get') and 'pipeline_spec' in original_object) or (hasattr(original_object, 'pipeline_spec') and getattr(original_object, 'pipeline_spec', None) is not None):
-            assert 'spec' in migrated_resource, "Migrated pipeline version should have spec"
-            assert 'pipelineSpec' in migrated_resource['spec'], "Should have pipelineSpec in spec"
-    
-    elif resource_type == "Experiment":
-        # Validate experiment-specific attributes
-        original_name = original_object.get('display_name')
-        migrated_name = migrated_resource.get('metadata', {}).get('name')
-        assert migrated_name == original_name, \
-            f"Experiment name mismatch: migrated={migrated_name}, original={original_name}"
-        
-        # Validate experiment ID preservation in annotations
-        original_id = original_object.get('experiment_id')
-        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
-            f"Experiment ID should be preserved in annotations: {original_id}"
-    
-    elif resource_type == "Run":
-        # Validate run-specific attributes
-        original_name = original_object.get('display_name')
-        migrated_name = migrated_resource.get('metadata', {}).get('name')
-        
-        # Validate run ID preservation in annotations
-        original_id = original_object.get('run_id')
-        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
-            f"Run ID should be preserved in annotations: {original_id}"
-    
-    elif resource_type == "RecurringRun":
-        # Validate recurring run-specific attributes
-        original_name = original_object.get('display_name')
-        migrated_name = migrated_resource.get('metadata', {}).get('name')
-        
-        # Validate recurring run ID preservation in annotations
-        original_id = original_object.get('recurring_run_id')
-        annotations = migrated_resource.get('metadata', {}).get('annotations', {})
-        assert annotations.get('pipelines.kubeflow.org/original-id') == original_id, \
-            f"Recurring run ID should be preserved in annotations: {original_id}"
   
 def test_migration_single_pipeline_single_version(test_data, run_migration):
     """Test migration of a single pipeline with single version.
@@ -201,40 +122,32 @@ def test_migration_single_pipeline_single_version(test_data, run_migration):
         print(f"Generated file: {yaml_file}")
     
     # Verify YAML files were created
-    assert len(yaml_files) > 0, "Migration should create YAML files"    
+    assert len(yaml_files) > 0, "Migration should create YAML files" 
    
-    migrated_resources = parse_yaml_files(output_dir)    
-    original_pipeline = find_test_data_by_name(test_data, "pipelines", "hello-world")   
-    pipelines = migrated_resources["Pipeline"]
-    assert len(pipelines) >= 1, "Should have at least one Pipeline resource"    
-    simple_pipeline_resources = [p for p in pipelines 
-                                if "hello-world" in p.get("metadata", {}).get("name", "")]
-    assert len(simple_pipeline_resources) >= 1, "Should have migrated hello-world pipeline"
-    
-    # Compare migrated pipeline with original
-    migrated_pipeline = simple_pipeline_resources[0]    
-    compare_complete_objects(migrated_pipeline, original_pipeline, "Pipeline")
-    
+    migration_objects = parse_yaml_files_to_objects(output_dir)
+    original_pipeline = find_test_data_by_name(test_data, "pipelines", "hello-world")
+
+    migrated_pipeline = migration_objects.get_pipeline_by_name(original_pipeline.display_name)
+    assert migrated_pipeline is not None, "Should have migrated hello-world pipeline"
+    assert migrated_pipeline.get_name() == original_pipeline.display_name
+    assert migrated_pipeline.get_original_id() == getattr(original_pipeline, 'pipeline_id', None)
+
     # Verify pipeline versions exist
-    pipeline_versions = migrated_resources["PipelineVersion"]
-    simple_versions = [v for v in pipeline_versions 
-                      if "hello-world" in v.get("metadata", {}).get("name", "")]
-    assert len(simple_versions) >= 1, "Hello-world pipeline should have at least one version"
-    
-    # Validate version structure
-    for version in simple_versions:       
-        annotations = version.get('metadata', {}).get('annotations', {})
-        original_version_id = annotations.get('pipelines.kubeflow.org/original-id')
-        original_version = None
+    migrated_versions = migration_objects.get_pipeline_versions_by_pipeline_name(original_pipeline.display_name)
+    assert len(migrated_versions) >= 1, "Hello-world pipeline should have at least one version"
+
+    for mv in migrated_versions:
+        original_version_id = mv.get_original_id()
+        match = None
         for original in test_data.get('pipelines', []):
-            # Only match pipeline versions (have pipeline_version_id)
-            original_id = getattr(original, 'pipeline_version_id', None)
-            if original_id == original_version_id:
-                original_version = original
+            if getattr(original, 'pipeline_version_id', None) == original_version_id:
+                match = original
                 break
-        
-        if original_version:
-            compare_complete_objects(version, original_version, "PipelineVersion")
+        if match:
+            assert mv.get_name() == getattr(match, 'display_name', None)
+            assert mv.get_original_id() == getattr(match, 'pipeline_version_id', None)
+            if mv.get_pipeline_spec() is not None:
+                assert 'pipelineInfo' in mv.get_pipeline_spec()
 
 
 def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
@@ -253,44 +166,30 @@ def test_migration_single_pipeline_multiple_versions(test_data, run_migration):
     
     assert len(yaml_files) > 0, "Migration should create YAML files"    
     
-    migrated_resources = parse_yaml_files(output_dir)
+    migration_objects = parse_yaml_files_to_objects(output_dir)
     original_pipeline = find_test_data_by_name(test_data, "pipelines", "add-numbers")
-    pipelines = migrated_resources["Pipeline"]
-    complex_pipeline_resources = [p for p in pipelines 
-                                if "add-numbers" in p.get("metadata", {}).get("name", "")]
-    assert len(complex_pipeline_resources) >= 1, "Should have migrated add-numbers pipeline"
-    
-    # Compare migrated pipeline with original
-    migrated_pipeline = complex_pipeline_resources[0]    
-    compare_complete_objects(migrated_pipeline, original_pipeline, "Pipeline")
-    
-    pipeline_versions = migrated_resources["PipelineVersion"]    
-    
-    # Find versions that belong to add-numbers pipeline
-    complex_versions = []
-    for version in pipeline_versions:        
-        pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
-        if pipeline_name == 'add-numbers':
-            complex_versions.append(version)
+
+    migrated_pipeline = migration_objects.get_pipeline_by_name(original_pipeline.display_name)
+    assert migrated_pipeline is not None, "Should have migrated add-numbers pipeline"
+    assert migrated_pipeline.get_original_id() == getattr(original_pipeline, 'pipeline_id', None)
+
+    complex_versions = migration_objects.get_pipeline_versions_by_pipeline_name(original_pipeline.display_name)
     assert len(complex_versions) >= 3, f"add-numbers pipeline should have at least 3 versions, found {len(complex_versions)}"
-    
-    print(f"Found {len(complex_versions)} versions for add-numbers pipeline")
-    
-    # Validate version structure and compare with originals
-    for version in complex_versions:       
-        annotations = version.get('metadata', {}).get('annotations', {})
-        original_version_id = annotations.get('pipelines.kubeflow.org/original-id')
-        original_version = None
-        for original in test_data.get('pipelines', []):            
-            # Only match pipeline versions (have pipeline_version_id)
-            original_id = getattr(original, 'pipeline_version_id', None)
-            if original_id == original_version_id:
-                original_version = original
+
+    for mv in complex_versions:
+        original_version_id = mv.get_original_id()
+        match = None
+        for original in test_data.get('pipelines', []):
+            if getattr(original, 'pipeline_version_id', None) == original_version_id:
+                match = original
                 break
-        
-        if original_version:
-            compare_complete_objects(version, original_version, "PipelineVersion")
-  
+        if match:
+            assert mv.get_name() == getattr(match, 'display_name', None)
+            assert mv.get_original_id() == getattr(match, 'pipeline_version_id', None)
+            if mv.get_pipeline_spec() is not None:
+                assert 'pipelineInfo' in mv.get_pipeline_spec()
+
+
 def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration):
     """Test migration of multiple pipelines with multiple versions.
     
@@ -307,59 +206,43 @@ def test_migration_multiple_pipelines_multiple_versions(test_data, run_migration
     
     assert len(yaml_files) > 0, "Migration should create YAML files"
     
-    migrated_resources = parse_yaml_files(output_dir)
-    pipelines = migrated_resources["Pipeline"]
-    pipeline_versions = migrated_resources["PipelineVersion"]
-    
-    assert len(pipelines) >= 2, "Should have at least 2 pipelines"
-    assert len(pipeline_versions) >= 4, "Should have at least 4 pipeline versions (hello-world: 1 + add-numbers: 3)"
-   
+    migration_objects = parse_yaml_files_to_objects(output_dir)
+
+    assert len(migration_objects.k8s_pipelines) >= 2, "Should have at least 2 pipelines"
+    assert len(migration_objects.k8s_pipeline_versions) >= 4, "Should have at least 4 pipeline versions (hello-world: 1 + add-numbers: 3)"
+
     # Validate hello-world pipeline and its single version
-    hello_world_pipelines = [p for p in pipelines if "hello-world" in p.get("metadata", {}).get("name", "")]
-    assert len(hello_world_pipelines) >= 1, "Should have hello-world pipeline"    
-   
-    hello_world_versions = []
-    for version in pipeline_versions:
-        pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
-        if pipeline_name == 'echo':
-            hello_world_versions.append(version)
+    hello_world_pipeline = migration_objects.get_pipeline_by_name("hello-world")
+    assert hello_world_pipeline is not None, "Should have hello-world pipeline"
+
+    hello_world_versions = migration_objects.get_pipeline_versions_by_pipeline_name("hello-world")
     assert len(hello_world_versions) >= 1, "Hello-world should have at least 1 version"
-    
+
     # Validate add-numbers pipeline and its multiple versions
-    add_numbers_pipelines = [p for p in pipelines if "add-numbers" in p.get("metadata", {}).get("name", "")]
-    assert len(add_numbers_pipelines) >= 1, "Should have add-numbers pipeline"
-    
-    # Find add-numbers versions
-    add_numbers_versions = []
-    for version in pipeline_versions:
-        pipeline_name = version.get('spec', {}).get('pipelineSpec', {}).get('pipelineInfo', {}).get('name', '')
-        if pipeline_name == 'add-numbers':
-            add_numbers_versions.append(version)
+    add_numbers_pipeline = migration_objects.get_pipeline_by_name("add-numbers")
+    assert add_numbers_pipeline is not None, "Should have add-numbers pipeline"
+
+    add_numbers_versions = migration_objects.get_pipeline_versions_by_pipeline_name("add-numbers")
     assert len(add_numbers_versions) >= 3, f"Add-numbers should have at least 3 versions, found {len(add_numbers_versions)}"
-   
+
     # Validate test pipelines against original data
-    test_pipelines = [p for p in pipelines 
-                     if any(test_name in p.get("metadata", {}).get("name", "") 
-                           for test_name in ["hello-world", "add-numbers"])]
-    
-    for pipeline in test_pipelines:
-        pipeline_name = pipeline.get("metadata", {}).get("name", "")
-        original_pipeline = find_test_data_by_name(test_data, "pipelines", pipeline_name)        
-            
-        compare_complete_objects(pipeline, original_pipeline, "Pipeline")
-    
+    for pipeline_name in ["hello-world", "add-numbers"]:
+        migrated = migration_objects.get_pipeline_by_name(pipeline_name)
+        original = find_test_data_by_name(test_data, "pipelines", pipeline_name)
+        assert migrated is not None
+        assert migrated.get_name() == original.display_name
+        assert migrated.get_original_id() == getattr(original, 'pipeline_id', None)
+
     # Validate test pipeline versions against original data
-    test_versions = hello_world_versions + add_numbers_versions
-    
-    for version in test_versions:              
-        annotations = version.get('metadata', {}).get('annotations', {})
-        original_version_id = annotations.get('pipelines.kubeflow.org/original-id')
-        original_version = None
+    for mv in hello_world_versions + add_numbers_versions:
+        original_version_id = mv.get_original_id()
+        match = None
         for original in test_data.get('pipelines', []):
-            # Only match pipeline versions (have pipeline_version_id)
             if getattr(original, 'pipeline_version_id', None) == original_version_id:
-                original_version = original
+                match = original
                 break
-        
-        if original_version:
-            compare_complete_objects(version, original_version, "PipelineVersion")
+        if match:
+            assert mv.get_name() == getattr(match, 'display_name', None)
+            assert mv.get_original_id() == getattr(match, 'pipeline_version_id', None)
+            if mv.get_pipeline_spec() is not None:
+                assert 'pipelineInfo' in mv.get_pipeline_spec()
