@@ -74,7 +74,7 @@ def fetch_pipeline_versions(kfp_server_host, pipeline_id, headers, verify, names
     while True:
         url = (
             f"{kfp_server_host}/apis/v2beta1/pipelines/{pipeline_id}/versions?"
-            f"sort_by=created_at&order_by=asc&namespace={namespace}&page_size={batch_size}"
+            f"sort_by=created_at&order_by=asc&page_size={batch_size}"
         )
         if page_token:
             url += f"&page_token={page_token}"
