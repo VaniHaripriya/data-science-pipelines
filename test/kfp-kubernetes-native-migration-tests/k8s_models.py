@@ -56,6 +56,9 @@ class K8sPipelineVersion:
     def get_pipeline_spec(self) -> Optional[Dict[str, Any]]:
         return self.spec.get('pipelineSpec')
 
+    def get_pipeline_name(self) -> Optional[str]:
+        return self.spec.get('pipelineName')
+
 
 @dataclass
 class MigrationResult:
@@ -74,7 +77,8 @@ class MigrationResult:
         for v in self.k8s_pipeline_versions:
             spec = v.get_pipeline_spec() or {}
             info = spec.get('pipelineInfo', {})
-            if info.get('name') == pipeline_name:
+            # Match either by pipelineInfo.name (from pipelineSpec) or by spec.pipelineName
+            if info.get('name') == pipeline_name or v.get_pipeline_name() == pipeline_name:
                 versions.append(v)
         return versions
 
