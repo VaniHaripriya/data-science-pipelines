@@ -144,7 +144,8 @@ def get_pipeline_versions_for_pipeline(pipeline_name: str) -> List[K8sPipelineVe
     for v in all_versions:
         spec = v.get_pipeline_spec() or {}
         info = spec.get('pipelineInfo', {})
-        if info.get('name') == pipeline_name:
+        # Match either by pipelineSpec.pipelineInfo.name or spec.pipelineName
+        if info.get('name') == pipeline_name or v.get_pipeline_name() == pipeline_name:
             filtered.append(v)
     return filtered
    
@@ -175,6 +176,7 @@ def test_k8s_mode_pipeline_execution(kfp_client):
         "PipelineVersion should have original-id annotation"
     spec = first_version.get_pipeline_spec()
     assert spec is not None and 'pipelineInfo' in spec, "PipelineVersion should contain pipelineSpec with pipelineInfo"
+    print(f"Debug: selected pipeline='{first_pipeline_name}', version='{first_version.get_name()}', version_original_id='{first_version.get_original_id()}'")
     
     # Test pipeline execution
     experiment = kfp_client.create_experiment(
@@ -214,6 +216,7 @@ def test_k8s_mode_pipeline_execution(kfp_client):
     test_params = {}
     if 'add-numbers' in first_pipeline_name:
         test_params = {'a': 5, 'b': 3}
+    print(f"Debug: test will send params={test_params}")
     
     run_data = kfp_client.run_pipeline(
         experiment_id=experiment_id,
