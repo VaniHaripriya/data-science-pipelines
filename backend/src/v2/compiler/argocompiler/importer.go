@@ -108,6 +108,22 @@ func (c *workflowCompiler) addImporterTemplate() string {
 			EnvFrom:   []k8score.EnvFromSource{metadataEnvFrom},
 			Env:       commonEnvs,
 			Resources: driverResources,
+			VolumeMounts: []k8score.VolumeMount{
+				{
+					Name:      workspaceVolumeName,
+					MountPath: component.WorkspaceMountPath,
+				},
+			},
+		},
+		Volumes: []k8score.Volume{
+			{
+				Name: workspaceVolumeName,
+				VolumeSource: k8score.VolumeSource{
+					PersistentVolumeClaim: &k8score.PersistentVolumeClaimVolumeSource{
+						ClaimName: fmt.Sprintf("{{workflow.name}}-%s", workspaceVolumeName),
+					},
+				},
+			},
 		},
 	}
 

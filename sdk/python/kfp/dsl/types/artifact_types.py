@@ -94,24 +94,22 @@ class Artifact:
         self._set_path(path)
 
     def _get_path(self) -> Optional[str]:
-        # If the artifact is already present in the pipeline workspace, map to the
-        # workspace path instead of remote mount paths.
+        # If the artifact is already present in the pipeline workspace, map to the workspace path.
         # This is indicated by backend setting metadata['_kfp_workspace'] = True.
-        if self.metadata.get('_kfp_workspace') is True:
-            # Compute blob key by stripping scheme and bucket from URI.
+        if self.metadata.get('_kfp_workspace') is True:            
             uri = self.uri or ''
             for prefix in (RemotePrefix.GCS.value, RemotePrefix.MINIO.value, RemotePrefix.S3.value):
                 if uri.startswith(prefix):
-                    without_scheme = uri[len(prefix):]  # bucket/key...
-                    # Split once on '/', remainder (if any) is the object key under the bucket
+                    # Derive the object key relative to the bucket:
+                    # "<bucket>/<key>" -> blob_key == "<key>"
+                    without_scheme = uri[len(prefix):]
                     parts = without_scheme.split('/', 1)
                     blob_key = parts[1] if len(parts) == 2 else ''
                     if blob_key:
                         return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts', blob_key)
-                    # Fallback to workspace artifacts root if key is empty
+
                     return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts')
-            # If scheme is not one of the supported remote providers, fall through
-            # to default handling below.
+           
         if self.uri.startswith(RemotePrefix.GCS.value):
             return _GCS_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.GCS.value
                                                          ):]

@@ -102,6 +102,8 @@ from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_secret_as_env
     pipeline_secret_env
 from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_workspace import \
     pipeline_with_workspace
+from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_importer_workspace import \
+    pipeline_with_importer_workspace
 from test_data.sdk_compiled_pipelines.valid.critical.producer_consumer_param import \
     producer_consumer_param_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.pythonic_artifacts_test_pipeline import \
@@ -471,6 +473,13 @@ class TestPipelineCompilation:
                 pipline_func_args=None,
                 compiled_file_name='pipeline_with_workspace.yaml',
                 expected_compiled_file_path=f'{_VALID_PIPELINE_FILES}/critical/pipeline_with_workspace.yaml'
+            ),
+            TestData(
+                pipeline_name='pipeline-with-importer-workspace',
+                pipeline_func=pipeline_with_importer_workspace,
+                pipline_func_args=None,
+                compiled_file_name='pipeline_with_importer_workspace.yaml',
+                expected_compiled_file_path=f'{_VALID_PIPELINE_FILES}/critical/pipeline_with_importer_workspace.yaml'
             ),
             TestData(
                 pipeline_name='containerized-two-step-pipeline',
