@@ -37,6 +37,8 @@ from test_data.sdk_compiled_pipelines.valid.critical.mixed_parameters import \
     crust as mixed_parameters_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.multiple_parameters_namedtuple import \
     crust as namedtuple_pipeline
+from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_importer_workspace import \
+    pipeline_with_importer_workspace as importer_workspace_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.producer_consumer_param import \
     producer_consumer_param_pipeline
 from test_data.sdk_compiled_pipelines.valid.dict_input import dict_input
@@ -173,6 +175,12 @@ pipeline_func_data = [
         pipeline_func_args=None,
         expected_output=None,
     ),
+    TestData(
+        name='Importer Workspace',
+        pipeline_func=importer_workspace_pipeline,
+        pipeline_func_args=None,
+        expected_output=None,
+    ),
 ]
 
 docker_specific_pipeline_funcs = [
@@ -223,7 +231,11 @@ class TestDockerRunner:
     def setup_and_teardown(self):
         ws_root = f'{ws_root_base}_docker'
         pipeline_root = f'{pipeline_root_base}_docker'
-        Path(ws_root).mkdir(exist_ok=True)
+        if os.path.isdir(ws_root):
+            shutil.rmtree(ws_root, ignore_errors=True)
+        Path(ws_root).mkdir(parents=True, exist_ok=True)
+        # Ensure importer workspace test can write even if Docker created root-owned dirs
+        os.chmod(ws_root, 0o777)
         Path(pipeline_root).mkdir(exist_ok=True)
         local.init(
             runner=local.DockerRunner(),
