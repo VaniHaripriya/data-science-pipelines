@@ -92,6 +92,8 @@ from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_artifact_uplo
     my_pipeline as artifact_upload_download_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_env import \
     my_pipeline as env_pipeline
+from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_importer_workspace import \
+    pipeline_with_importer_workspace
 from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_input_status_state import \
     status_state_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_placeholders import \
@@ -102,8 +104,6 @@ from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_secret_as_env
     pipeline_secret_env
 from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_workspace import \
     pipeline_with_workspace
-from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_importer_workspace import \
-    pipeline_with_importer_workspace
 from test_data.sdk_compiled_pipelines.valid.critical.producer_consumer_param import \
     producer_consumer_param_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.pythonic_artifacts_test_pipeline import \

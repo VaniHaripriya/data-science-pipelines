@@ -96,9 +96,10 @@ class Artifact:
     def _get_path(self) -> Optional[str]:
         # If the artifact is already present in the pipeline workspace, map to the workspace path.
         # This is indicated by backend setting metadata['_kfp_workspace'] = True.
-        if self.metadata.get('_kfp_workspace') is True:            
+        if self.metadata.get('_kfp_workspace') is True:
             uri = self.uri or ''
-            for prefix in (RemotePrefix.GCS.value, RemotePrefix.MINIO.value, RemotePrefix.S3.value):
+            for prefix in (RemotePrefix.GCS.value, RemotePrefix.MINIO.value,
+                           RemotePrefix.S3.value):
                 if uri.startswith(prefix):
                     # Derive the object key relative to the bucket:
                     # "<bucket>/<key>" -> blob_key == "<key>"
@@ -106,10 +107,11 @@ class Artifact:
                     parts = without_scheme.split('/', 1)
                     blob_key = parts[1] if len(parts) == 2 else ''
                     if blob_key:
-                        return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts', blob_key)
+                        return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts',
+                                            blob_key)
 
                     return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts')
-           
+
         if self.uri.startswith(RemotePrefix.GCS.value):
             return _GCS_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.GCS.value
                                                          ):]
