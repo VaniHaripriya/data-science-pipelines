@@ -10,6 +10,7 @@ import (
 
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 
+	"github.com/kubeflow/pipelines/backend/src/v2/config"
 	"github.com/kubeflow/pipelines/backend/src/v2/objectstore"
 
 	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
