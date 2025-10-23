@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/kubeflow/pipelines/backend/src/common/util"
@@ -296,38 +294,50 @@ func (l *ImportLauncher) ImportSpecToMLMDArtifact(ctx context.Context) (artifact
 
 	// Download the artifact into the workspace
 	if l.importer.GetDownloadToWorkspace() {
-		bucketConfig, err := objectstore.ParseBucketConfigForArtifactURI(artifactUri)
+		bucketConfig, err := l.resolveBucketConfigForURI(ctx, artifactUri)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse bucket config while downloading artifact into workspace with uri %q: %w", artifactUri, err)
+			return nil, err
 		}
-		// Resolve and attach session info from kfp-launcher config for the artifact provider
-		if cfg, cfgErr := config.FromConfigMap(ctx, l.k8sClient, l.launcherV2Options.Namespace); cfgErr != nil {
-			glog.Warningf("failed to load launcher config for workspace download: %v", cfgErr)
-		} else if cfg != nil {
-			if sess, sessErr := cfg.GetStoreSessionInfo(artifactUri); sessErr != nil {
-				glog.Warningf("failed to resolve store session info for %q: %v", artifactUri, sessErr)
-			} else {
-				bucketConfig.SessionInfo = &sess
-			}
+		localPath, err := LocalWorkspacePathForURI(artifactUri)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get local path for uri %q: %w", artifactUri, err)
 		}
+
 		blobKey, err := bucketConfig.KeyFromURI(artifactUri)
 		if err != nil {
 			return nil, fmt.Errorf("failed to derive blob key from uri %q while downloading artifact into workspace: %w", artifactUri, err)
-		}
-		workspaceRoot := filepath.Join(WorkspaceMountPath, ".artifacts")
-		if err := os.MkdirAll(workspaceRoot, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create workspace directory %q: %w", workspaceRoot, err)
 		}
 		bucket, err := objectstore.OpenBucket(ctx, l.k8sClient, l.launcherV2Options.Namespace, bucketConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open bucket for uri %q: %w", artifactUri, err)
 		}
 		defer bucket.Close()
-		if err := objectstore.DownloadBlob(ctx, bucket, workspaceRoot, blobKey); err != nil {
+		glog.Infof("Downloading artifact %q (blob key %q) to workspace path %q", artifactUri, blobKey, localPath)
+		if err := objectstore.DownloadBlob(ctx, bucket, localPath, blobKey); err != nil {
 			return nil, fmt.Errorf("failed to download artifact to workspace: %w", err)
 		}
 	}
 	return artifact, nil
+}
+
+// resolveBucketConfigForURI parses bucket configuration for a given artifact URI and
+// attaches session information from the kfp-launcher ConfigMap when available.
+func (l *ImportLauncher) resolveBucketConfigForURI(ctx context.Context, uri string) (*objectstore.Config, error) {
+	bucketConfig, err := objectstore.ParseBucketConfigForArtifactURI(uri)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse bucket config while resolving uri %q: %w", uri, err)
+	}
+	// Resolve and attach session info from kfp-launcher config for the artifact provider
+	if cfg, cfgErr := config.FromConfigMap(ctx, l.k8sClient, l.launcherV2Options.Namespace); cfgErr != nil {
+		glog.Warningf("failed to load launcher config while resolving bucket config: %v", cfgErr)
+	} else if cfg != nil {
+		if sess, sessErr := cfg.GetStoreSessionInfo(uri); sessErr != nil {
+			glog.Warningf("failed to resolve store session info for %q: %v", uri, sessErr)
+		} else {
+			bucketConfig.SessionInfo = &sess
+		}
+	}
+	return bucketConfig, nil
 }
 
 func (l *ImportLauncher) getOutPutArtifactName() (string, error) {

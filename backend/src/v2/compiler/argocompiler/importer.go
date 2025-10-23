@@ -33,7 +33,7 @@ func (c *workflowCompiler) Importer(name string, componentSpec *pipelinespec.Com
 	return c.saveComponentImpl(name, importer)
 }
 
-func (c *workflowCompiler) importerTask(name string, task *pipelinespec.PipelineTaskSpec, taskJSON string, parentDagID string) (*wfapi.DAGTask, error) {
+func (c *workflowCompiler) importerTask(name string, task *pipelinespec.PipelineTaskSpec, taskJSON string, parentDagID string, downloadToWorkspace bool) (*wfapi.DAGTask, error) {
 	componentPlaceholder, err := c.useComponentSpec(task.GetComponentRef().GetName())
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (c *workflowCompiler) importerTask(name string, task *pipelinespec.Pipeline
 	}
 	return &wfapi.DAGTask{
 		Name:     name,
-		Template: c.addImporterTemplate(),
+		Template: c.addImporterTemplate(downloadToWorkspace),
 		Arguments: wfapi.Arguments{Parameters: []wfapi.Parameter{{
 			Name:  paramTask,
 			Value: wfapi.AnyStringPtr(taskJSON),
@@ -61,8 +61,11 @@ func (c *workflowCompiler) importerTask(name string, task *pipelinespec.Pipeline
 	}, nil
 }
 
-func (c *workflowCompiler) addImporterTemplate() string {
+func (c *workflowCompiler) addImporterTemplate(downloadToWorkspace bool) string {
 	name := "system-importer"
+	if downloadToWorkspace {
+		name += "-workspace"
+	}
 	if _, alreadyExists := c.templates[name]; alreadyExists {
 		return name
 	}
@@ -105,18 +108,9 @@ func (c *workflowCompiler) addImporterTemplate() string {
 	if value, ok := os.LookupEnv(PublishLogsEnvVar); ok {
 		args = append(args, "--publish_logs", value)
 	}
-	// Add workspace volume only if the workflow defines a workspace PVC
-	hasWorkspacePVC := false
-	for _, pvc := range c.wf.Spec.VolumeClaimTemplates {
-		if pvc.Name == workspaceVolumeName {
-			hasWorkspacePVC = true
-			break
-		}
-	}
-
 	var volumeMounts []k8score.VolumeMount
 	var volumes []k8score.Volume
-	if hasWorkspacePVC {
+	if downloadToWorkspace {
 		volumeMounts = append(volumeMounts, k8score.VolumeMount{
 			Name:      workspaceVolumeName,
 			MountPath: component.WorkspaceMountPath,

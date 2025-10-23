@@ -862,19 +862,17 @@ func getPlaceholders(executorInput *pipelinespec.ExecutorInput) (placeholders ma
 		key := fmt.Sprintf(`{{$.inputs.artifacts['%s'].uri}}`, name)
 		placeholders[key] = inputArtifact.Uri
 
-		// If the artifact is marked as already in the workspace, map the workspace path.
+		// If the artifact is marked as already in the workspace, map to the workspace path
+		// with the same shape as LocalPathForURI, but rebased under the workspace mount.
 		if inputArtifact.GetMetadata() != nil {
 			if v, ok := inputArtifact.GetMetadata().GetFields()["_kfp_workspace"]; ok && v.GetBoolValue() {
-				bucketConfig, err := objectstore.ParseBucketConfigForArtifactURI(inputArtifact.Uri)
-				if err == nil {
-					blobKey, err := bucketConfig.KeyFromURI(inputArtifact.Uri)
-					if err == nil {
-						localPath := filepath.Join(WorkspaceMountPath, ".artifacts", blobKey)
-						key = fmt.Sprintf(`{{$.inputs.artifacts['%s'].path}}`, name)
-						placeholders[key] = localPath
-						continue
-					}
+				localPath, lerr := LocalWorkspacePathForURI(inputArtifact.Uri)
+				if lerr != nil {
+					return nil, fmt.Errorf("failed to get local workspace path for input artifact %q: %w", name, lerr)
 				}
+				key = fmt.Sprintf(`{{$.inputs.artifacts['%s'].path}}`, name)
+				placeholders[key] = localPath
+				continue
 			}
 		}
 
@@ -1014,6 +1012,21 @@ func LocalPathForURI(uri string) (string, error) {
 		return "/oci/" + strings.ReplaceAll(strings.TrimPrefix(uri, "oci://"), "/", "_") + "/models", nil
 	}
 	return "", fmt.Errorf("failed to generate local path for URI %s: unsupported storage scheme", uri)
+}
+
+// LocalWorkspacePathForURI returns the local workspace path for a given artifact URI.
+// It preserves the same path shape as LocalPathForURI, but rebases it under the
+// workspace artifacts directory: /kfp-workspace/.artifacts/...
+func LocalWorkspacePathForURI(uri string) (string, error) {
+	if strings.HasPrefix(uri, "oci://") {
+		return "", fmt.Errorf("failed to generate workspace path for URI %s: OCI not supported for workspace artifacts", uri)
+	}
+	localPath, err := LocalPathForURI(uri)
+	if err != nil {
+		return "", err
+	}
+	// Rebase under the workspace mount, stripping the leading '/'
+	return filepath.Join(WorkspaceMountPath, ".artifacts", strings.TrimPrefix(localPath, "/")), nil
 }
 
 func prepareOutputFolders(executorInput *pipelinespec.ExecutorInput) error {

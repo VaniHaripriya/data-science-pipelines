@@ -94,39 +94,25 @@ class Artifact:
         self._set_path(path)
 
     def _get_path(self) -> Optional[str]:
+        local_path = self.uri
+
+        if self.uri.startswith(RemotePrefix.GCS.value):
+            local_path = _GCS_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.GCS.value                                             ):]
+        elif self.uri.startswith(RemotePrefix.MINIO.value):
+            local_path = _MINIO_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.MINIO                                                 .value):]
+        elif self.uri.startswith(RemotePrefix.S3.value):
+            local_path = _S3_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.S3.value                                             ):]
+        elif self.uri.startswith(RemotePrefix.OCI.value):
+            escaped_uri = self.uri[len(RemotePrefix.OCI.value):].replace(
+                '/', '_')
+            local_path = _OCI_LOCAL_MOUNT_PREFIX + escaped_uri
+
         # If the artifact is already present in the pipeline workspace, map to the workspace path.
         # This is indicated by backend setting metadata['_kfp_workspace'] = True.
         if self.metadata.get('_kfp_workspace') is True:
-            uri = self.uri or ''
-            for prefix in (RemotePrefix.GCS.value, RemotePrefix.MINIO.value,
-                           RemotePrefix.S3.value):
-                if uri.startswith(prefix):
-                    # Derive the object key relative to the bucket:
-                    # "<bucket>/<key>" -> blob_key == "<key>"
-                    without_scheme = uri[len(prefix):]
-                    parts = without_scheme.split('/', 1)
-                    blob_key = parts[1] if len(parts) == 2 else ''
-                    if blob_key:
-                        return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts',
-                                            blob_key)
-
-                    return os.path.join(WORKSPACE_MOUNT_PATH, '.artifacts')
-
-        if self.uri.startswith(RemotePrefix.GCS.value):
-            return _GCS_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.GCS.value
-                                                         ):]
-        if self.uri.startswith(RemotePrefix.MINIO.value):
-            return _MINIO_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.MINIO
-                                                            .value):]
-        if self.uri.startswith(RemotePrefix.S3.value):
-            return _S3_LOCAL_MOUNT_PREFIX + self.uri[len(RemotePrefix.S3.value
-                                                        ):]
-        if self.uri.startswith(RemotePrefix.OCI.value):
-            escaped_uri = self.uri[len(RemotePrefix.OCI.value):].replace(
-                '/', '_')
-            return _OCI_LOCAL_MOUNT_PREFIX + escaped_uri
-        # uri == path for local execution
-        return self.uri
+            local_path = os.path.join(WORKSPACE_MOUNT_PATH, ".artifacts", local_path.lstrip("/"))
+        
+        return local_path
 
     def _set_path(self, path: str) -> None:
         self.uri = convert_local_path_to_remote_path(path)
