@@ -21,7 +21,7 @@ RUN mkdir -p ./server/dist && \
     echo ${DATE} > ./server/dist/BUILD_DATE && \
     echo ${TAG_NAME} > ./server/dist/TAG_NAME
 
-FROM node:22.13-alpine
+FROM node:22.21.1-alpine
 
 COPY --from=build ./src/frontend/server /server
 COPY --from=build ./src/frontend/build /client
