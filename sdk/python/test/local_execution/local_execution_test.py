@@ -232,6 +232,7 @@ class TestDockerRunner:
         ws_root = f'{ws_root_base}_docker'
         pipeline_root = f'{pipeline_root_base}_docker'
         Path(ws_root).mkdir(exist_ok=True)
+        os.chmod(ws_root, 0o755)
         Path(pipeline_root).mkdir(exist_ok=True)
         local.init(
             runner=local.DockerRunner(),
