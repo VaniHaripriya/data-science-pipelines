@@ -256,6 +256,9 @@ class TestDockerRunner:
         if test_data.name == 'Importer Workspace':
             ws_root = f'{ws_root_base}_docker'
             pipeline_root = f'{pipeline_root_base}_docker'
+            if os.path.isdir(ws_root):
+                shutil.rmtree(ws_root, ignore_errors=True)
+            Path(ws_root).mkdir(parents=True, exist_ok=True)
             local.init(
                 runner=local.DockerRunner(user=f'{os.getuid()}'),
                 raise_on_error=True,
