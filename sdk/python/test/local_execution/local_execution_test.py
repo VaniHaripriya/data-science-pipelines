@@ -37,6 +37,8 @@ from test_data.sdk_compiled_pipelines.valid.critical.mixed_parameters import \
     crust as mixed_parameters_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.multiple_parameters_namedtuple import \
     crust as namedtuple_pipeline
+from test_data.sdk_compiled_pipelines.valid.critical.pipeline_with_importer_workspace import \
+    pipeline_with_importer_workspace as importer_workspace_pipeline
 from test_data.sdk_compiled_pipelines.valid.critical.producer_consumer_param import \
     producer_consumer_param_pipeline
 from test_data.sdk_compiled_pipelines.valid.dict_input import dict_input
@@ -173,6 +175,12 @@ pipeline_func_data = [
         pipeline_func_args=None,
         expected_output=None,
     ),
+    TestData(
+        name='Importer Workspace',
+        pipeline_func=importer_workspace_pipeline,
+        pipeline_func_args=None,
+        expected_output=None,
+    ),
 ]
 
 docker_specific_pipeline_funcs = [
@@ -244,6 +252,12 @@ class TestDockerRunner:
     @pytest.mark.parametrize(
         'test_data', docker_specific_pipeline_funcs, ids=idfn)
     def test_execution(self, test_data: TestData):
+        if test_data.name == 'Importer Workspace':
+            ws_root = f'{ws_root_base}_docker'
+            if os.path.isdir(ws_root):
+                shutil.rmtree(ws_root, ignore_errors=True)
+            Path(ws_root).mkdir(parents=True, exist_ok=True)
+
         if test_data.pipeline_func_args is not None:
             pipeline_task = test_data.pipeline_func(
                 **test_data.pipeline_func_args)
