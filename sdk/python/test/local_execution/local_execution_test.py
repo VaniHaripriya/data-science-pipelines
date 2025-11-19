@@ -231,7 +231,7 @@ class TestDockerRunner:
     def setup_and_teardown(self):
         ws_root = f'{ws_root_base}_docker'
         pipeline_root = f'{pipeline_root_base}_docker'
-        Path(ws_root).mkdir(exist_ok=True)        
+        Path(ws_root).mkdir(exist_ok=True)
         Path(pipeline_root).mkdir(exist_ok=True)
         local.init(
             runner=local.DockerRunner(),
@@ -252,6 +252,12 @@ class TestDockerRunner:
     @pytest.mark.parametrize(
         'test_data', docker_specific_pipeline_funcs, ids=idfn)
     def test_execution(self, test_data: TestData):
+        if test_data.name == 'Importer Workspace':
+            ws_root = f'{ws_root_base}_docker'
+            if os.path.isdir(ws_root):
+                shutil.rmtree(ws_root, ignore_errors=True)
+            Path(ws_root).mkdir(parents=True, exist_ok=True)
+
         if test_data.pipeline_func_args is not None:
             pipeline_task = test_data.pipeline_func(
                 **test_data.pipeline_func_args)
