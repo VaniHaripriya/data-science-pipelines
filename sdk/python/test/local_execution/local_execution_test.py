@@ -231,11 +231,10 @@ class TestDockerRunner:
     def setup_and_teardown(self):
         ws_root = f'{ws_root_base}_docker'
         pipeline_root = f'{pipeline_root_base}_docker'
-        Path(ws_root).mkdir(exist_ok=True)
-        os.chmod(ws_root, 0o755)
+        Path(ws_root).mkdir(exist_ok=True)        
         Path(pipeline_root).mkdir(exist_ok=True)
         local.init(
-             runner=local.DockerRunner(group_add=f'{os.getgid()}'),
+            runner=local.DockerRunner(),
             raise_on_error=True,
             workspace_root=ws_root,
             pipeline_root=pipeline_root)

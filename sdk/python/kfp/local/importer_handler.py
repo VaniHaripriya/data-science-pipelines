@@ -150,18 +150,12 @@ def run_importer(
             source_path = parsed_uri.path if scheme == 'file' else uri
             try:
                 workspace_root = _get_workspace_root()
+                workspace_artifacts_root = os.path.join(
+                    workspace_root, '.artifacts')
+                os.makedirs(workspace_artifacts_root, exist_ok=True)
                 cfg = config.LocalExecutionConfig.instance
-                try:
-                    host_path = _copy_local_artifact_to_workspace(
-                        source_path, workspace_root, component_name)
-                except PermissionError:
-                    raise RuntimeError(
-                        'Failed to copy artifact into workspace_root due to permissions. '
-                        'This can happen when the Docker container user does not match the host user, '
-                        'or the host directory permissions are too restrictive. '
-                        'Try initializing local execution with an explicit Docker user matching the host UID, e.g.: '
-                        'local.init(runner=local.DockerRunner(user=f"{os.getuid()}"), workspace_root="...", pipeline_root="..."), '
-                        'or relax permissions on the workspace_root directory.')
+                host_path = _copy_local_artifact_to_workspace(
+                    source_path, workspace_artifacts_root, component_name)
 
                 if isinstance(cfg.runner, config.DockerRunner):
                     rel_path = os.path.relpath(host_path, workspace_root)
