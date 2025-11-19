@@ -232,9 +232,10 @@ class TestDockerRunner:
         ws_root = f'{ws_root_base}_docker'
         pipeline_root = f'{pipeline_root_base}_docker'
         Path(ws_root).mkdir(exist_ok=True)
+        os.chmod(ws_root, 0o755)
         Path(pipeline_root).mkdir(exist_ok=True)
         local.init(
-            runner=local.DockerRunner(),
+             runner=local.DockerRunner(group=f'{os.getgid()}'),
             raise_on_error=True,
             workspace_root=ws_root,
             pipeline_root=pipeline_root)
@@ -252,32 +253,11 @@ class TestDockerRunner:
     @pytest.mark.parametrize(
         'test_data', docker_specific_pipeline_funcs, ids=idfn)
     def test_execution(self, test_data: TestData):
-        if test_data.name == 'Importer Workspace':
-            ws_root = f'{ws_root_base}_docker'
-            pipeline_root = f'{pipeline_root_base}_docker'
-            if os.path.isdir(ws_root):
-                shutil.rmtree(ws_root, ignore_errors=True)
-            Path(ws_root).mkdir(parents=True, exist_ok=True)
-            local.init(
-                runner=local.DockerRunner(user=f'{os.getuid()}'),
-                raise_on_error=True,
-                workspace_root=ws_root,
-                pipeline_root=pipeline_root)
-            try:
-                pipeline_task = test_data.pipeline_func()
-            finally:
-                # Restore default DockerRunner for subsequent tests
-                local.init(
-                    runner=local.DockerRunner(),
-                    raise_on_error=True,
-                    workspace_root=ws_root,
-                    pipeline_root=pipeline_root)
+        if test_data.pipeline_func_args is not None:
+            pipeline_task = test_data.pipeline_func(
+                **test_data.pipeline_func_args)
         else:
-            if test_data.pipeline_func_args is not None:
-                pipeline_task = test_data.pipeline_func(
-                    **test_data.pipeline_func_args)
-            else:
-                pipeline_task = test_data.pipeline_func()
+            pipeline_task = test_data.pipeline_func()
         if test_data.expected_output is None:
             print("Skipping output check")
         elif type(test_data.expected_output) == list:
