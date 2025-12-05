@@ -110,3 +110,4 @@ urllib3==2.5.0
     #   requests
 websocket-client==1.8.0
     # via kubernetes
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
