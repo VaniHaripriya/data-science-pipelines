@@ -4,7 +4,7 @@
   "dependencies": {
     "@aws-sdk/credential-providers": "^3.621.0",
     "@google-cloud/storage": "^2.5.0",
-    "@kubernetes/client-node": "^0.16.3",
+    "@kubernetes/client-node": "^0.21.0",
     "axios": ">=1.12.0",
     "crypto-js": "^4.2.0",
     "express": "^5.1.0",
@@ -12,7 +12,7 @@
     "gunzip-maybe": "^1.4.1",
     "http-proxy-middleware": "^2.0.7",
     "js-yaml": "^4.1.0",
-    "lodash": ">=4.17.21",
+    "lodash": ">=4.17.23",
     "minio": "~8.0.3",
     "node-fetch": "2.6.7",
     "peek-stream": "^1.1.3",
