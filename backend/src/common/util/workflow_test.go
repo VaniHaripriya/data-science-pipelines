@@ -20,6 +20,7 @@ import (
 	workflowapi "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -501,6 +502,49 @@ func TestWorkflow_SetLabelsToAllTemplates(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, workflow.Get())
+}
+
+func TestWorkflow_SetEnvVarsToDriverAndLauncherTemplates(t *testing.T) {
+	workflow := NewWorkflow(&workflowapi.Workflow{
+		Spec: workflowapi.WorkflowSpec{
+			Templates: []workflowapi.Template{
+				{
+					Name:      "system-dag-driver",
+					Container: &corev1.Container{},
+				},
+				{
+					Name: "system-container-impl",
+					Container: &corev1.Container{
+						Env: []corev1.EnvVar{{Name: "KFP_MLFLOW_WORKSPACE", Value: "old"}},
+					},
+					InitContainers: []corev1.Container{{Name: "kfp-launcher"}},
+				},
+				{
+					Name:      "user-template",
+					Container: &corev1.Container{},
+				},
+			},
+		},
+	})
+
+	workflow.SetEnvVarsToDriverAndLauncherTemplates(map[string]string{
+		"KFP_MLFLOW_TRACKING_URI":  "https://mlflow.example.com",
+		"KFP_MLFLOW_WORKSPACE":     "ns1",
+		"KFP_MLFLOW_PARENT_RUN_ID": "run-1",
+	})
+
+	driverEnv := workflow.Spec.Templates[0].Container.Env
+	assert.Contains(t, driverEnv, corev1.EnvVar{Name: "KFP_MLFLOW_TRACKING_URI", Value: "https://mlflow.example.com"})
+	assert.Contains(t, driverEnv, corev1.EnvVar{Name: "KFP_MLFLOW_WORKSPACE", Value: "ns1"})
+	assert.Contains(t, driverEnv, corev1.EnvVar{Name: "KFP_MLFLOW_PARENT_RUN_ID", Value: "run-1"})
+
+	launcherEnv := workflow.Spec.Templates[1].Container.Env
+	assert.Contains(t, launcherEnv, corev1.EnvVar{Name: "KFP_MLFLOW_TRACKING_URI", Value: "https://mlflow.example.com"})
+	assert.Contains(t, launcherEnv, corev1.EnvVar{Name: "KFP_MLFLOW_WORKSPACE", Value: "ns1"})
+	assert.Contains(t, launcherEnv, corev1.EnvVar{Name: "KFP_MLFLOW_PARENT_RUN_ID", Value: "run-1"})
+
+	// Non-driver/non-launcher templates must remain unchanged.
+	assert.Empty(t, workflow.Spec.Templates[2].Container.Env)
 }
 
 func TestSetLabels(t *testing.T) {

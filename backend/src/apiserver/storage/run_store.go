@@ -579,15 +579,19 @@ func (s *RunStore) UpdateRun(run *model.Run) error {
 	if historyString, err := json.Marshal(run.RunDetails.StateHistory); err == nil {
 		stateHistoryString = string(historyString)
 	}
+	updateFields := sq.Eq{
+		"Conditions":              run.Conditions,
+		"State":                   run.State.ToString(),
+		"StateHistory":            stateHistoryString,
+		"FinishedAtInSec":         run.FinishedAtInSec,
+		"WorkflowRuntimeManifest": run.WorkflowRuntimeManifest,
+	}
+	if run.PluginsOutputString != nil {
+		updateFields["PluginsOutput"] = largeTextToNullableSQL(run.PluginsOutputString)
+	}
 	sql, args, err := sq.
 		Update("run_details").
-		SetMap(sq.Eq{
-			"Conditions":              run.Conditions,
-			"State":                   run.State.ToString(),
-			"StateHistory":            stateHistoryString,
-			"FinishedAtInSec":         run.FinishedAtInSec,
-			"WorkflowRuntimeManifest": run.WorkflowRuntimeManifest,
-		}).
+		SetMap(updateFields).
 		Where(sq.Eq{"UUID": run.UUID}).
 		ToSql()
 	if err != nil {

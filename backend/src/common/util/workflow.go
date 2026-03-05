@@ -39,6 +39,7 @@ import (
 	swfapi "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -706,6 +707,58 @@ func (w *Workflow) SetPodMetadataLabels(key string, value string) {
 		w.Workflow.Spec.PodMetadata.Labels = make(map[string]string)
 	}
 	w.Workflow.Spec.PodMetadata.Labels[key] = value
+}
+
+// SetEnvVarsToDriverAndLauncherTemplates sets env vars on driver and launcher container templates.
+// Driver templates are identified by names containing "driver".
+// Launcher templates are identified by the system container impl template name or a kfp-launcher init container.
+func (w *Workflow) SetEnvVarsToDriverAndLauncherTemplates(envVars map[string]string) {
+	if len(envVars) == 0 || len(w.Spec.Templates) == 0 {
+		return
+	}
+	for i := range w.Spec.Templates {
+		tmpl := &w.Spec.Templates[i]
+		if tmpl.Container == nil {
+			continue
+		}
+		if isDriverTemplateName(tmpl.Name) || isLauncherTemplate(tmpl) {
+			for k, v := range envVars {
+				upsertContainerEnvVar(tmpl.Container, k, v)
+			}
+		}
+	}
+}
+
+func isDriverTemplateName(name string) bool {
+	return strings.Contains(strings.ToLower(name), "driver")
+}
+
+func isLauncherTemplate(tmpl *workflowapi.Template) bool {
+	if tmpl == nil {
+		return false
+	}
+	if tmpl.Name == "system-container-impl" {
+		return true
+	}
+	for _, c := range tmpl.InitContainers {
+		if c.Name == "kfp-launcher" || strings.Contains(strings.ToLower(c.Image), "kfp-launcher") {
+			return true
+		}
+	}
+	return false
+}
+
+func upsertContainerEnvVar(container *corev1.Container, key, value string) {
+	if container == nil {
+		return
+	}
+	for i := range container.Env {
+		if container.Env[i].Name == key {
+			container.Env[i].Value = value
+			return
+		}
+	}
+	container.Env = append(container.Env, corev1.EnvVar{Name: key, Value: value})
 }
 
 func (w *Workflow) ReplaceUID(id string) error {

@@ -15,13 +15,20 @@
 package resource
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
+	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
@@ -34,15 +41,18 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/list"
+	apiservermlflow "github.com/kubeflow/pipelines/backend/src/apiserver/mlflow"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/template"
 	exec "github.com/kubeflow/pipelines/backend/src/common"
+	commonmlflow "github.com/kubeflow/pipelines/backend/src/common/mlflow"
 	"github.com/kubeflow/pipelines/backend/src/common/util"
 	scheduledworkflowclient "github.com/kubeflow/pipelines/backend/src/crd/pkg/client/clientset/versioned/typed/scheduledworkflow/v1beta1"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/spf13/viper"
 	"google.golang.org/grpc/codes"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -51,6 +61,86 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
+
+const defaultMLflowExperimentName = "Default"
+const defaultMLflowTimeout = "30s"
+const mlflowLauncherConfigMapName = "kfp-launcher"
+const mlflowLauncherConfigKey = "plugins.mlflow"
+const defaultMLflowAuthType = commonmlflow.DefaultAuthType
+const mlflowAuthTypeBearer = commonmlflow.AuthTypeBearer
+const mlflowAuthTypeBasicAuth = commonmlflow.AuthTypeBasicAuth
+const defaultMLflowTokenKey = "MLFLOW_TRACKING_TOKEN"
+const defaultMLflowUsernameKey = "MLFLOW_TRACKING_USERNAME"
+const defaultMLflowPasswordKey = "MLFLOW_TRACKING_PASSWORD"
+const defaultMLflowRetryInitialInterval = commonmlflow.DefaultRetryInitial
+const defaultMLflowRetryMaxInterval = commonmlflow.DefaultRetryMax
+const defaultMLflowRetryMaxElapsed = commonmlflow.DefaultRetryElapsed
+const mlflowAuthorizationEnabledConfigKey = apiservermlflow.AuthorizationEnabledConfigKey
+const kfpMLflowTrackingURIEnvVar = "KFP_MLFLOW_TRACKING_URI"
+const kfpMLflowWorkspaceEnvVar = "KFP_MLFLOW_WORKSPACE"
+const kfpMLflowParentRunIDEnvVar = "KFP_MLFLOW_PARENT_RUN_ID"
+
+var mlflowServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+type TLSConfig struct {
+	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty" mapstructure:"insecureSkipVerify"`
+	CABundlePath       string `json:"caBundlePath,omitempty" mapstructure:"caBundlePath"`
+}
+
+type PluginConfig struct {
+	Endpoint string          `json:"endpoint,omitempty" mapstructure:"endpoint"`
+	Timeout  string          `json:"timeout,omitempty" mapstructure:"timeout"`
+	TLS      *TLSConfig      `json:"tls,omitempty" mapstructure:"tls"`
+	Settings json.RawMessage `json:"settings,omitempty" mapstructure:"settings"`
+}
+
+type CredentialSecretRef struct {
+	Name        string `json:"name,omitempty"`
+	TokenKey    string `json:"tokenKey,omitempty"`
+	UsernameKey string `json:"usernameKey,omitempty"`
+	PasswordKey string `json:"passwordKey,omitempty"`
+}
+
+type MLflowPluginSettings struct {
+	WorkspacesEnabled     *bool                `json:"workspacesEnabled,omitempty"`
+	AuthType              string               `json:"authType,omitempty"`
+	CredentialSecretRef   *CredentialSecretRef `json:"credentialSecretRef,omitempty"`
+	ExperimentDescription *string              `json:"experimentDescription,omitempty"`
+}
+
+type MLflowRequestConfig struct {
+	PluginSettings *MLflowPluginSettings
+	PluginConfig   *PluginConfig
+}
+
+type mlflowAuthMaterial struct {
+	authType      string
+	bearerToken   string
+	basicUsername string
+	basicPassword string
+}
+
+type MLflowRequestContext struct {
+	BaseURL           *url.URL
+	WorkspacesEnabled bool
+	Workspace         string
+	client            *commonmlflow.Client
+}
+
+// PluginHandler encapsulates plugin lifecycle hooks used by core paths.
+// The method names align with KEP-12700 hook semantics.
+type PluginHandler interface {
+	OnRunStart(ctx context.Context, run *model.Run, namespace string) (*apiv2beta1.PluginOutput, error)
+	OnRunEnd(ctx context.Context, run *model.Run, namespace string) error
+	OnTaskStart(ctx context.Context, taskInfo interface{}, namespace string) (interface{}, error)
+	OnTaskEnd(ctx context.Context, taskInfo interface{}, metrics map[string]float64, params map[string]string, namespace string) error
+}
+
+type mlflowPluginHandler struct {
+	resourceManager *ResourceManager
+	input           *mlflowPluginInput
+	runStartEnv     map[string]string
+}
 
 // Metric variables. Please prefix the metric names with resource_manager_.
 var (
@@ -541,6 +631,21 @@ func (r *ResourceManager) GetPipelineLatestTemplate(pipelineId string) ([]byte, 
 // Manifest's namespace gets overwritten with the run.Namespace.
 // Creating a run from recurring run prioritizes recurring run's pipeline spec over the run's one.
 func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model.Run, error) {
+	mlflowInput, err := resolveMLflowPluginInput(run)
+	if err != nil {
+		return nil, util.NewBadRequestError(err, "Failed to create a run due to invalid MLflow plugin input")
+	}
+	if mlflowInput.Disabled {
+		glog.Infof("MLflow is disabled for this run; skipping MLflow-specific create-run behavior")
+	} else {
+		selectedExperimentID, selectedExperimentName := selectMLflowExperiment(mlflowInput)
+		if selectedExperimentID != "" {
+			glog.Infof("Resolved MLflow experiment selector for run creation: experiment_id=%q (create-by-name skipped)", selectedExperimentID)
+		} else {
+			glog.Infof("Resolved MLflow experiment selector for run creation: experiment_name=%q", selectedExperimentName)
+		}
+	}
+
 	// Create a template based on the manifest of an existing pipeline version or used-provided manifest.
 	// Update the run.PipelineSpec if an existing pipeline version is used.
 	tmpl, manifest, err := r.fetchTemplateFromPipelineSpec(&run.PipelineSpec)
@@ -581,6 +686,9 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 	}
 	if k8sNamespace == "" {
 		return nil, util.NewInternalServerError(util.NewInvalidInputError("Namespace cannot be empty when creating an Argo workflow. Check if you have specified POD_NAMESPACE or try adding the parent namespace to the request"), "Failed to create a run due to empty namespace")
+	}
+	if !mlflowInput.Disabled {
+		r.applyMLflowOnRunStart(ctx, run, k8sNamespace, mlflowInput, executionSpec)
 	}
 	executionSpec.SetExecutionNamespace(k8sNamespace)
 
@@ -638,6 +746,533 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 	}
 
 	return newRun, nil
+}
+
+type mlflowPluginInput struct {
+	ExperimentName string `json:"experiment_name,omitempty"`
+	ExperimentID   string `json:"experiment_id,omitempty"`
+	Disabled       bool   `json:"disabled,omitempty"`
+}
+
+func resolveMLflowPluginInput(run *model.Run) (*mlflowPluginInput, error) {
+	if run == nil || run.PluginsInputString == nil || *run.PluginsInputString == "" {
+		return &mlflowPluginInput{ExperimentName: defaultMLflowExperimentName}, nil
+	}
+
+	pluginInputs := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(*run.PluginsInputString), &pluginInputs); err != nil {
+		return nil, util.NewInvalidInputError("plugins_input must be a valid JSON object: %v", err)
+	}
+	mlflowRaw, ok := pluginInputs["mlflow"]
+	if !ok || len(mlflowRaw) == 0 {
+		return &mlflowPluginInput{ExperimentName: defaultMLflowExperimentName}, nil
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(mlflowRaw))
+	decoder.DisallowUnknownFields()
+	input := &mlflowPluginInput{}
+	if err := decoder.Decode(input); err != nil {
+		return nil, util.NewInvalidInputError("plugins_input.mlflow must follow schema {experiment_name?: string, experiment_id?: string, disabled?: bool}: %v", err)
+	}
+	// Ensure there isn't trailing JSON data after the mlflow object.
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, util.NewInvalidInputError("plugins_input.mlflow must be a single JSON object")
+	}
+
+	// `disabled=true` short-circuits MLflow behavior, so no defaulting is needed.
+	if input.Disabled {
+		return input, nil
+	}
+	// experiment_id takes precedence over experiment_name.
+	if input.ExperimentID != "" {
+		return input, nil
+	}
+	if input.ExperimentName == "" {
+		input.ExperimentName = defaultMLflowExperimentName
+	}
+	return input, nil
+}
+
+func (r *ResourceManager) resolveMLflowRequestConfig(ctx context.Context, namespace string) (*MLflowRequestConfig, error) {
+	globalCfg, hasGlobal, err := getGlobalMLflowPluginConfig()
+	if err != nil {
+		return nil, err
+	}
+	// Namespace overrides are only effective when global config enables MLflow.
+	if !hasGlobal {
+		return nil, nil
+	}
+
+	namespaceCfg, hasNamespace, err := r.getNamespaceMLflowPluginConfig(ctx, namespace)
+	if err != nil {
+		return nil, err
+	}
+	mergedCfg := mergePluginConfig(globalCfg, namespaceCfg)
+	if mergedCfg.Timeout == "" {
+		mergedCfg.Timeout = defaultMLflowTimeout
+	}
+	settings, err := parseMLflowPluginSettings(mergedCfg.Settings)
+	if err != nil {
+		return nil, err
+	}
+	// Endpoint override must be paired with namespace credentials.
+	if hasNamespace && namespaceCfg != nil && namespaceCfg.Endpoint != "" && globalCfg.Endpoint != namespaceCfg.Endpoint {
+		if settings.CredentialSecretRef == nil || settings.CredentialSecretRef.Name == "" {
+			return nil, util.NewInvalidInputError("namespace plugins.mlflow endpoint override requires namespace credentialSecretRef")
+		}
+	}
+	return &MLflowRequestConfig{
+		PluginSettings: settings,
+		PluginConfig:   &mergedCfg,
+	}, nil
+}
+
+func getGlobalMLflowPluginConfig() (PluginConfig, bool, error) {
+	if !viper.IsSet("plugins.mlflow") {
+		return PluginConfig{}, false, nil
+	}
+	var cfg PluginConfig
+	if err := viper.UnmarshalKey("plugins.mlflow", &cfg); err != nil {
+		return PluginConfig{}, false, util.NewInvalidInputError("failed to parse global plugins.mlflow config: %v", err)
+	}
+	return cfg, true, nil
+}
+
+func (r *ResourceManager) getNamespaceMLflowPluginConfig(ctx context.Context, namespace string) (*PluginConfig, bool, error) {
+	if namespace == "" {
+		return nil, false, nil
+	}
+	clientSet := r.k8sCoreClient.GetClientSet()
+	if clientSet == nil {
+		return nil, false, nil
+	}
+	cm, err := clientSet.CoreV1().ConfigMaps(namespace).Get(ctx, mlflowLauncherConfigMapName, v1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, false, nil
+		}
+		return nil, false, util.NewInternalServerError(err, "failed to read namespace configmap %q in namespace %q", mlflowLauncherConfigMapName, namespace)
+	}
+	raw, ok := cm.Data[mlflowLauncherConfigKey]
+	if !ok || raw == "" {
+		return nil, false, nil
+	}
+	var cfg PluginConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return nil, false, util.NewInvalidInputError("failed to parse namespace %q %s as JSON: %v", namespace, mlflowLauncherConfigKey, err)
+	}
+	return &cfg, true, nil
+}
+
+func parseMLflowPluginSettings(raw json.RawMessage) (*MLflowPluginSettings, error) {
+	settings := &MLflowPluginSettings{
+		AuthType: defaultMLflowAuthType,
+	}
+	if len(raw) != 0 {
+		if err := json.Unmarshal(raw, settings); err != nil {
+			return nil, util.NewInvalidInputError("failed to parse plugins.mlflow.settings: %v", err)
+		}
+	}
+	if settings.AuthType == "" {
+		settings.AuthType = defaultMLflowAuthType
+	}
+	if settings.WorkspacesEnabled == nil {
+		defaultEnabled := settings.AuthType == defaultMLflowAuthType
+		settings.WorkspacesEnabled = &defaultEnabled
+	}
+	return settings, nil
+}
+
+func mergePluginConfig(globalCfg PluginConfig, namespaceCfg *PluginConfig) PluginConfig {
+	merged := globalCfg
+	if namespaceCfg == nil {
+		return merged
+	}
+	if namespaceCfg.Endpoint != "" {
+		merged.Endpoint = namespaceCfg.Endpoint
+	}
+	if namespaceCfg.Timeout != "" {
+		merged.Timeout = namespaceCfg.Timeout
+	}
+	if namespaceCfg.TLS != nil {
+		merged.TLS = namespaceCfg.TLS
+	}
+	if len(namespaceCfg.Settings) != 0 {
+		merged.Settings = namespaceCfg.Settings
+	}
+	return merged
+}
+
+func (r *ResourceManager) buildMLflowRequestContext(ctx context.Context, namespace string, requestCfg *MLflowRequestConfig) (*MLflowRequestContext, error) {
+	if requestCfg == nil || requestCfg.PluginConfig == nil || requestCfg.PluginConfig.Endpoint == "" {
+		return nil, nil
+	}
+	baseURL, err := url.Parse(requestCfg.PluginConfig.Endpoint)
+	if err != nil || baseURL.Scheme == "" || baseURL.Host == "" {
+		return nil, util.NewInvalidInputError("invalid plugins.mlflow endpoint %q", requestCfg.PluginConfig.Endpoint)
+	}
+	settings := requestCfg.PluginSettings
+	if settings == nil {
+		settings, err = parseMLflowPluginSettings(requestCfg.PluginConfig.Settings)
+		if err != nil {
+			return nil, err
+		}
+	}
+	timeout, err := time.ParseDuration(requestCfg.PluginConfig.Timeout)
+	if err != nil {
+		return nil, util.NewInvalidInputError("invalid plugins.mlflow timeout %q: %v", requestCfg.PluginConfig.Timeout, err)
+	}
+	if timeout <= 0 {
+		return nil, util.NewInvalidInputError("plugins.mlflow timeout must be > 0")
+	}
+	authMaterial, err := r.resolveMLflowAuthMaterial(ctx, namespace, settings)
+	if err != nil {
+		return nil, err
+	}
+	httpClient, err := buildMLflowHTTPClient(timeout, requestCfg.PluginConfig.TLS)
+	if err != nil {
+		return nil, err
+	}
+	workspacesEnabled := settings.WorkspacesEnabled != nil && *settings.WorkspacesEnabled
+	retrySettings := commonmlflow.RetryPolicy{
+		InitialInterval: defaultMLflowRetryInitialInterval,
+		MaxInterval:     defaultMLflowRetryMaxInterval,
+		MaxElapsedTime:  defaultMLflowRetryMaxElapsed,
+		Multiplier:      2.0,
+	}
+	sharedClient, err := commonmlflow.NewClient(commonmlflow.Config{
+		Endpoint:          requestCfg.PluginConfig.Endpoint,
+		HTTPClient:        httpClient,
+		AuthType:          authMaterial.authType,
+		BearerToken:       authMaterial.bearerToken,
+		BasicAuthUsername: authMaterial.basicUsername,
+		BasicAuthPassword: authMaterial.basicPassword,
+		WorkspacesEnabled: workspacesEnabled,
+		Workspace:         namespace,
+		Retry:             retrySettings,
+	})
+	if err != nil {
+		return nil, util.NewInvalidInputError("failed to build MLflow client: %v", err)
+	}
+	return &MLflowRequestContext{
+		BaseURL:           baseURL,
+		Workspace:         namespace,
+		WorkspacesEnabled: workspacesEnabled,
+		client:            sharedClient,
+	}, nil
+}
+
+func (r *ResourceManager) resolveMLflowAuthMaterial(ctx context.Context, namespace string, settings *MLflowPluginSettings) (mlflowAuthMaterial, error) {
+	authType := defaultMLflowAuthType
+	if settings != nil && settings.AuthType != "" {
+		authType = strings.ToLower(settings.AuthType)
+	}
+	switch authType {
+	case defaultMLflowAuthType:
+		tokenBytes, err := os.ReadFile(mlflowServiceAccountTokenPath)
+		if err != nil {
+			return mlflowAuthMaterial{}, util.NewInternalServerError(err, "failed to read API server service account token for MLflow auth")
+		}
+		token := strings.TrimSpace(string(tokenBytes))
+		if token == "" {
+			return mlflowAuthMaterial{}, util.NewInvalidInputError("API server service account token is empty for MLflow auth")
+		}
+		return mlflowAuthMaterial{
+			authType:    authType,
+			bearerToken: token,
+		}, nil
+	case mlflowAuthTypeBearer:
+		secretData, secretRef, err := r.getMLflowCredentialSecretData(ctx, namespace, settings, authType)
+		if err != nil {
+			return mlflowAuthMaterial{}, err
+		}
+		tokenKey := secretRef.TokenKey
+		if tokenKey == "" {
+			tokenKey = defaultMLflowTokenKey
+		}
+		token := strings.TrimSpace(string(secretData[tokenKey]))
+		if token == "" {
+			return mlflowAuthMaterial{}, util.NewInvalidInputError("plugins.mlflow credential secret %q key %q must be non-empty for bearer auth", secretRef.Name, tokenKey)
+		}
+		return mlflowAuthMaterial{
+			authType:    authType,
+			bearerToken: token,
+		}, nil
+	case mlflowAuthTypeBasicAuth:
+		secretData, secretRef, err := r.getMLflowCredentialSecretData(ctx, namespace, settings, authType)
+		if err != nil {
+			return mlflowAuthMaterial{}, err
+		}
+		usernameKey := secretRef.UsernameKey
+		if usernameKey == "" {
+			usernameKey = defaultMLflowUsernameKey
+		}
+		passwordKey := secretRef.PasswordKey
+		if passwordKey == "" {
+			passwordKey = defaultMLflowPasswordKey
+		}
+		username := strings.TrimSpace(string(secretData[usernameKey]))
+		password := strings.TrimSpace(string(secretData[passwordKey]))
+		if username == "" {
+			return mlflowAuthMaterial{}, util.NewInvalidInputError("plugins.mlflow credential secret %q key %q must be non-empty for basic-auth", secretRef.Name, usernameKey)
+		}
+		if password == "" {
+			return mlflowAuthMaterial{}, util.NewInvalidInputError("plugins.mlflow credential secret %q key %q must be non-empty for basic-auth", secretRef.Name, passwordKey)
+		}
+		return mlflowAuthMaterial{
+			authType:      authType,
+			basicUsername: username,
+			basicPassword: password,
+		}, nil
+	default:
+		return mlflowAuthMaterial{}, util.NewInvalidInputError("unsupported plugins.mlflow.settings.authType %q (expected one of %q, %q, %q)", authType, defaultMLflowAuthType, mlflowAuthTypeBearer, mlflowAuthTypeBasicAuth)
+	}
+}
+
+func (r *ResourceManager) getMLflowCredentialSecretData(ctx context.Context, namespace string, settings *MLflowPluginSettings, authType string) (map[string][]byte, *CredentialSecretRef, error) {
+	if namespace == "" {
+		return nil, nil, util.NewInvalidInputError("namespace must be set for MLflow %s auth", authType)
+	}
+	if settings == nil || settings.CredentialSecretRef == nil || settings.CredentialSecretRef.Name == "" {
+		return nil, nil, util.NewInvalidInputError("plugins.mlflow.settings.credentialSecretRef.name is required for authType %q", authType)
+	}
+	clientSet := r.k8sCoreClient.GetClientSet()
+	if clientSet == nil {
+		return nil, nil, util.NewInternalServerError(errors.New("kubernetes clientset is nil"), "failed to read MLflow credential secret")
+	}
+	secretRef := settings.CredentialSecretRef
+	secret, err := clientSet.CoreV1().Secrets(namespace).Get(ctx, secretRef.Name, v1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil, util.NewInvalidInputError("plugins.mlflow credential secret %q not found in namespace %q", secretRef.Name, namespace)
+		}
+		return nil, nil, util.NewInternalServerError(err, "failed to read MLflow credential secret %q in namespace %q", secretRef.Name, namespace)
+	}
+	return secret.Data, secretRef, nil
+}
+
+func buildMLflowHTTPClient(timeout time.Duration, tlsCfg *TLSConfig) (*http.Client, error) {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if tlsCfg != nil {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: tlsCfg.InsecureSkipVerify,
+		}
+		if tlsCfg.CABundlePath != "" {
+			caBundle, err := os.ReadFile(tlsCfg.CABundlePath)
+			if err != nil {
+				return nil, util.NewInvalidInputError("failed to read plugins.mlflow.tls.caBundlePath %q: %v", tlsCfg.CABundlePath, err)
+			}
+			certPool := x509.NewCertPool()
+			if !certPool.AppendCertsFromPEM(caBundle) {
+				return nil, util.NewInvalidInputError("plugins.mlflow.tls.caBundlePath %q did not contain valid PEM certificates", tlsCfg.CABundlePath)
+			}
+			tlsConfig.RootCAs = certPool
+		}
+		transport.TLSClientConfig = tlsConfig
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}, nil
+}
+
+func (h *mlflowPluginHandler) OnRunStart(ctx context.Context, run *model.Run, namespace string) (*apiv2beta1.PluginOutput, error) {
+	if h == nil || h.resourceManager == nil || run == nil || h.input == nil || h.input.Disabled {
+		return nil, nil
+	}
+	experimentID, experimentName := selectMLflowExperiment(h.input)
+	requestCfg, err := h.resourceManager.resolveMLflowRequestConfig(ctx, namespace)
+	if err != nil {
+		return apiservermlflow.FailedPluginOutput(experimentID, experimentName, "", "", fmt.Sprintf("failed to resolve MLflow request configuration: %v", err)), err
+	}
+	if requestCfg == nil {
+		// MLflow is not configured for this namespace; no plugin output is emitted.
+		return nil, nil
+	}
+	if err := h.resourceManager.authorizeMLflowExperimentAction(ctx, namespace); err != nil {
+		return apiservermlflow.FailedPluginOutput(experimentID, experimentName, "", "", err.Error()), err
+	}
+	mlflowRequestCtx, err := h.resourceManager.buildMLflowRequestContext(ctx, namespace, requestCfg)
+	if err != nil {
+		return apiservermlflow.FailedPluginOutput(experimentID, experimentName, "", "", fmt.Sprintf("failed to build MLflow request context: %v", err)), err
+	}
+	if mlflowRequestCtx == nil {
+		return nil, nil
+	}
+	var description *string
+	if requestCfg.PluginSettings != nil {
+		description = requestCfg.PluginSettings.ExperimentDescription
+	}
+	mlflowExperiment, err := apiservermlflow.EnsureExperimentExists(
+		ctx,
+		toAPIServerMLflowRequestContext(mlflowRequestCtx),
+		experimentID,
+		experimentName,
+		apiservermlflow.ResolveExperimentDescription(description),
+	)
+	if err != nil {
+		return apiservermlflow.FailedPluginOutput(experimentID, experimentName, "", "", err.Error()), err
+	}
+	parentRunID, err := apiservermlflow.CreateParentRun(ctx, toAPIServerMLflowRequestContext(mlflowRequestCtx), mlflowExperiment.ID, run.DisplayName)
+	if err != nil {
+		return apiservermlflow.FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, "", "", err.Error()), err
+	}
+	h.runStartEnv = map[string]string{
+		kfpMLflowTrackingURIEnvVar: mlflowRequestCtx.BaseURL.String(),
+		kfpMLflowWorkspaceEnvVar:   namespace,
+		kfpMLflowParentRunIDEnvVar: parentRunID,
+	}
+	if err := apiservermlflow.TagRunWithKFPMetadata(ctx, toAPIServerMLflowRequestContext(mlflowRequestCtx), parentRunID, run); err != nil {
+		return apiservermlflow.FailedPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, parentRunID, "", err.Error()), err
+	}
+	runURL := apiservermlflow.BuildRunURL(toAPIServerMLflowRequestContext(mlflowRequestCtx), mlflowExperiment.ID, parentRunID)
+	return apiservermlflow.SuccessfulPluginOutput(mlflowExperiment.ID, mlflowExperiment.Name, parentRunID, runURL), nil
+}
+
+func (h *mlflowPluginHandler) OnRunEnd(ctx context.Context, run *model.Run, namespace string) error {
+	if h == nil || h.resourceManager == nil || run == nil {
+		return nil
+	}
+	return h.resourceManager.syncMLflowOnRunTerminal(ctx, run)
+}
+
+func (h *mlflowPluginHandler) OnTaskStart(ctx context.Context, taskInfo interface{}, namespace string) (interface{}, error) {
+	return nil, nil
+}
+
+func (h *mlflowPluginHandler) OnTaskEnd(ctx context.Context, taskInfo interface{}, metrics map[string]float64, params map[string]string, namespace string) error {
+	return nil
+}
+
+func (r *ResourceManager) applyMLflowOnRunStart(ctx context.Context, run *model.Run, namespace string, input *mlflowPluginInput, executionSpec util.ExecutionSpec) {
+	handler := &mlflowPluginHandler{
+		resourceManager: r,
+		input:           input,
+	}
+	pluginOutput, pluginErr := handler.OnRunStart(ctx, run, namespace)
+	if pluginErr != nil {
+		glog.Warningf("MLflow OnRunStart failed for run %q (run creation will continue): %v", run.UUID, pluginErr)
+	}
+	if pluginOutput == nil {
+		return
+	}
+	if err := apiservermlflow.UpsertRunPluginOutput(run, "mlflow", pluginOutput); err != nil {
+		glog.Warningf("Failed to persist MLflow plugin output for run %q: %v", run.UUID, err)
+	}
+	if len(handler.runStartEnv) != 0 {
+		if err := injectMLflowRuntimeEnv(executionSpec, handler.runStartEnv); err != nil {
+			glog.Warningf("Failed to inject MLflow runtime env for run %q: %v", run.UUID, err)
+		}
+	}
+}
+
+func (r *ResourceManager) applyMLflowOnRunEnd(ctx context.Context, run *model.Run, namespace string) {
+	handler := &mlflowPluginHandler{
+		resourceManager: r,
+	}
+	if err := handler.OnRunEnd(ctx, run, namespace); err != nil {
+		glog.Warningf("MLflow OnRunEnd failed for run %q: %v", run.UUID, err)
+	}
+}
+
+func (r *ResourceManager) applyMLflowOnRunRetry(ctx context.Context, run *model.Run, namespace string) {
+	pluginOutput, err := apiservermlflow.GetRunPluginOutput(run, apiservermlflow.PluginName)
+	if err != nil || pluginOutput == nil {
+		if err != nil {
+			glog.Warningf("MLflow RetryRun hook skipped for run %q: %v", run.UUID, err)
+		}
+		return
+	}
+	parentRunID := apiservermlflow.GetParentRunID(pluginOutput)
+	experimentID := apiservermlflow.GetStringEntry(pluginOutput, apiservermlflow.EntryExperimentID)
+	if parentRunID == "" {
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, "MLflow retry sync skipped: missing parent run_id in plugins_output.mlflow")
+		if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+			glog.Warningf("Failed to persist MLflow retry sync output for run %q: %v", run.UUID, upsertErr)
+		}
+		return
+	}
+	requestCfg, cfgErr := r.resolveMLflowRequestConfig(ctx, namespace)
+	if cfgErr != nil || requestCfg == nil {
+		message := "MLflow retry sync failed: MLflow config unavailable"
+		if cfgErr != nil {
+			message = fmt.Sprintf("MLflow retry sync failed: %v", cfgErr)
+		}
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, message)
+		if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+			glog.Warningf("Failed to persist MLflow retry sync output for run %q: %v", run.UUID, upsertErr)
+		}
+		return
+	}
+	mlflowRequestCtx, ctxErr := r.buildMLflowRequestContext(ctx, namespace, requestCfg)
+	if ctxErr != nil || mlflowRequestCtx == nil || mlflowRequestCtx.client == nil {
+		message := "MLflow retry sync failed: unable to build MLflow request context"
+		if ctxErr != nil {
+			message = fmt.Sprintf("MLflow retry sync failed: %v", ctxErr)
+		}
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, message)
+		if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+			glog.Warningf("Failed to persist MLflow retry sync output for run %q: %v", run.UUID, upsertErr)
+		}
+		return
+	}
+	syncErrors := apiservermlflow.SyncParentAndNestedRuns(
+		ctx,
+		toAPIServerMLflowRequestContext(mlflowRequestCtx),
+		parentRunID,
+		experimentID,
+		apiservermlflow.RunSyncModeRetry,
+		"",
+		nil,
+	)
+	if len(syncErrors) > 0 {
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, strings.Join(syncErrors, "; "))
+	} else {
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_SUCCEEDED, "")
+	}
+	if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+		glog.Warningf("Failed to persist MLflow retry sync output for run %q: %v", run.UUID, upsertErr)
+	}
+}
+
+func toAPIServerMLflowRequestContext(mlflowCtx *MLflowRequestContext) *apiservermlflow.RequestContext {
+	if mlflowCtx == nil {
+		return nil
+	}
+	return &apiservermlflow.RequestContext{
+		BaseURL:           mlflowCtx.BaseURL,
+		Client:            mlflowCtx.client,
+		Workspace:         mlflowCtx.Workspace,
+		WorkspacesEnabled: mlflowCtx.WorkspacesEnabled,
+	}
+}
+
+func injectMLflowRuntimeEnv(executionSpec util.ExecutionSpec, env map[string]string) error {
+	if len(env) == 0 || executionSpec == nil {
+		return nil
+	}
+	workflow, ok := executionSpec.(*util.Workflow)
+	if !ok {
+		return util.NewInternalServerError(errors.New("unsupported execution spec type"), "failed to inject MLflow runtime env: unsupported execution spec")
+	}
+	workflow.SetEnvVarsToDriverAndLauncherTemplates(env)
+	return nil
+}
+
+// selectMLflowExperiment chooses the selector used for MLflow experiment resolution.
+// experiment_id takes precedence over experiment_name. If neither is set, "Default" is used.
+func selectMLflowExperiment(input *mlflowPluginInput) (experimentID string, experimentName string) {
+	if input == nil {
+		return "", defaultMLflowExperimentName
+	}
+	if input.ExperimentID != "" {
+		return input.ExperimentID, ""
+	}
+	if input.ExperimentName == "" {
+		return "", defaultMLflowExperimentName
+	}
+	return "", input.ExperimentName
 }
 
 // ReconcileSwfCrs reconciles the ScheduledWorkflow CRs based on existing jobs.
@@ -973,8 +1608,13 @@ func (r *ResourceManager) RetryRun(ctx context.Context, runId string) error {
 		}
 		newExecSpec = newCreatedWorkflow
 	}
+	r.applyMLflowOnRunRetry(ctx, run, namespace)
 	condition := string(newExecSpec.ExecutionStatus().Condition())
-	err = r.runStore.UpdateRun(&model.Run{UUID: runId, RunDetails: model.RunDetails{Conditions: condition, FinishedAtInSec: 0, WorkflowRuntimeManifest: model.LargeText(newExecSpec.ToStringForStore()), State: model.RuntimeState(condition).ToV2()}})
+	err = r.runStore.UpdateRun(&model.Run{
+		UUID:                runId,
+		RunDetails:          model.RunDetails{Conditions: condition, FinishedAtInSec: 0, WorkflowRuntimeManifest: model.LargeText(newExecSpec.ToStringForStore()), State: model.RuntimeState(condition).ToV2()},
+		PluginsOutputString: run.PluginsOutputString,
+	})
 	if err != nil {
 		return util.NewInternalServerError(err, "Failed to retry run %s due to error updating entry", runId)
 	}
@@ -1468,6 +2108,9 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 		}
 	}
 	if execStatus.IsInFinalState() {
+		if run != nil {
+			r.applyMLflowOnRunEnd(ctx, run, execSpec.ExecutionNamespace())
+		}
 		err := addWorkflowLabel(ctx, r.getWorkflowClient(execSpec.ExecutionNamespace()), execSpec.ExecutionName(), util.LabelKeyWorkflowPersistedFinalState, "true")
 		if err != nil {
 			message := fmt.Sprintf("Failed to add PersistedFinalState label to workflow %s", execSpec.ExecutionName())
@@ -1497,6 +2140,90 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 	}
 	execSpec.SetLabels("pipeline/runid", runId)
 	return execSpec, nil
+}
+
+func (r *ResourceManager) syncMLflowOnRunTerminal(ctx context.Context, run *model.Run) error {
+	pluginOutput, err := apiservermlflow.GetRunPluginOutput(run, apiservermlflow.PluginName)
+	if err != nil || pluginOutput == nil {
+		return err
+	}
+
+	parentRunID := apiservermlflow.GetParentRunID(pluginOutput)
+	experimentID := apiservermlflow.GetStringEntry(pluginOutput, apiservermlflow.EntryExperimentID)
+	if parentRunID == "" {
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, "MLflow terminal sync skipped: missing parent run_id in plugins_output.mlflow")
+		if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+			return upsertErr
+		}
+		return r.runStore.UpdateRun(run)
+	}
+
+	k8sNamespace := run.Namespace
+	if k8sNamespace == "" {
+		k8sNamespace = common.GetPodNamespace()
+	}
+	requestCfg, cfgErr := r.resolveMLflowRequestConfig(ctx, k8sNamespace)
+	if cfgErr != nil || requestCfg == nil {
+		message := "MLflow terminal sync failed: MLflow config unavailable"
+		if cfgErr != nil {
+			message = fmt.Sprintf("MLflow terminal sync failed: %v", cfgErr)
+		}
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, message)
+		if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+			return upsertErr
+		}
+		return r.runStore.UpdateRun(run)
+	}
+	mlflowRequestCtx, ctxErr := r.buildMLflowRequestContext(ctx, k8sNamespace, requestCfg)
+	if ctxErr != nil || mlflowRequestCtx == nil || mlflowRequestCtx.client == nil {
+		message := "MLflow terminal sync failed: unable to build MLflow request context"
+		if ctxErr != nil {
+			message = fmt.Sprintf("MLflow terminal sync failed: %v", ctxErr)
+		}
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, message)
+		if upsertErr := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); upsertErr != nil {
+			return upsertErr
+		}
+		return r.runStore.UpdateRun(run)
+	}
+
+	endTimeMs := int64(0)
+	endTimeRef := (*int64)(nil)
+	if run.FinishedAtInSec > 0 {
+		endTimeMs = run.FinishedAtInSec * 1000
+		endTimeRef = &endTimeMs
+	}
+	terminalStatus := toMLflowTerminalStatus(run.State)
+	syncErrors := apiservermlflow.SyncParentAndNestedRuns(
+		ctx,
+		toAPIServerMLflowRequestContext(mlflowRequestCtx),
+		parentRunID,
+		experimentID,
+		apiservermlflow.RunSyncModeTerminal,
+		terminalStatus,
+		endTimeRef,
+	)
+
+	if len(syncErrors) > 0 {
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_FAILED, strings.Join(syncErrors, "; "))
+	} else {
+		apiservermlflow.SetPluginOutputState(pluginOutput, apiv2beta1.RuntimeState_SUCCEEDED, "")
+	}
+	if err := apiservermlflow.UpsertRunPluginOutput(run, apiservermlflow.PluginName, pluginOutput); err != nil {
+		return err
+	}
+	return r.runStore.UpdateRun(run)
+}
+
+func toMLflowTerminalStatus(state model.RuntimeState) string {
+	switch state.ToV2() {
+	case model.RuntimeStateSucceeded:
+		return "FINISHED"
+	case model.RuntimeStateCanceled, model.RuntimeStateCancelling:
+		return "KILLED"
+	default:
+		return "FAILED"
+	}
 }
 
 // Adds a label for a workflow.
@@ -1988,6 +2715,13 @@ func (r *ResourceManager) IsAuthorized(ctx context.Context, resourceAttributes *
 	}
 	glog.Infof("Authorized user '%s': %+v", userIdentity, resourceAttributes)
 	return nil
+}
+
+// authorizeMLflowExperimentAction checks whether the caller is allowed to create/update MLflow experiments.
+// Standalone mode uses forwarded user headers when enabled by plugins.mlflow.authorizationEnabled.
+// Multi-user mode reuses the existing IsAuthorized path.
+func (r *ResourceManager) authorizeMLflowExperimentAction(ctx context.Context, namespace string) error {
+	return apiservermlflow.AuthorizeExperimentAction(ctx, namespace, r.subjectAccessReviewClient, r.IsAuthorized)
 }
 
 // Fetches namespace that an experiment belongs to.
