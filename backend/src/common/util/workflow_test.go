@@ -517,7 +517,7 @@ func TestWorkflow_SetEnvVarsToDriverAndLauncherTemplates(t *testing.T) {
 					Container: &corev1.Container{
 						Env: []corev1.EnvVar{{Name: "KFP_MLFLOW_WORKSPACE", Value: "old"}},
 					},
-					InitContainers: []corev1.Container{{Name: "kfp-launcher"}},
+					InitContainers: []workflowapi.UserContainer{{Container: corev1.Container{Name: "kfp-launcher"}}},
 				},
 				{
 					Name:      "user-template",

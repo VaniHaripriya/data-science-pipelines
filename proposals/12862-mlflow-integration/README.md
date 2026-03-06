@@ -531,12 +531,12 @@ This integration requires **MLflow v3.10 or later**, which introduced
 | Endpoint                                       | Purpose                                     |
 | ---------------------------------------------- | ------------------------------------------- |
 | `POST /api/2.0/mlflow/experiments/create`      | Create an MLflow experiment                 |
-| `POST /api/2.0/mlflow/experiments/get-by-name` | Look up an experiment by name               |
+| `GET /api/2.0/mlflow/experiments/get-by-name`  | Look up an experiment by name               |
 | `POST /api/2.0/mlflow/runs/create`             | Create a parent or nested MLflow run        |
 | `POST /api/2.0/mlflow/runs/update`             | Mark a run as complete or failed            |
 | `POST /api/2.0/mlflow/runs/log-batch`          | Log parameters and metrics in a single call |
 | `POST /api/2.0/mlflow/runs/set-tag`            | Set a tag (e.g., KFP run URL) on a run      |
-| `GET /api/2.0/mlflow/runs/search`              | Search for nested runs during cleanup       |
+| `POST /api/2.0/mlflow/runs/search`             | Search for nested runs during cleanup       |
 
 When `workspacesEnabled` is `true`, all MLflow REST API calls include an `X-MLflow-Workspace` header set to the
 Kubernetes namespace. This header is how MLflow routes requests to the correct workspace. The API server, driver, and
@@ -635,6 +635,7 @@ type MLflowPluginSettings struct {
 	AuthType              string               `json:"authType,omitempty"`              // "kubernetes" (default), "bearer", or "basic-auth"
 	CredentialSecretRef   *CredentialSecretRef `json:"credentialSecretRef,omitempty"`   // Required when authType is "bearer" or "basic-auth"
 	ExperimentDescription *string              `json:"experimentDescription,omitempty"` // nil = "Created by Kubeflow Pipelines"; "" = none
+	KFPBaseURL            string               `json:"kfpBaseURL,omitempty"`            // Public KFP UI base URL; when set, kfp.pipeline_run_url tag is absolute
 }
 ```
 

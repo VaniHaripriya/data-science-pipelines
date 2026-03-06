@@ -32,6 +32,150 @@ KFP consists of several key components:
 
 The system uses a layered architecture where users author pipelines with the Python SDK, the compiler translates them to Kubernetes CRDs, Argo executes the workflows, and backend services persist state and expose APIs for the frontend.
 
+## Key Architectural Patterns
+
+### API Server Resource Manager
+
+The `ResourceManager` (`backend/src/apiserver/resource/resource_manager.go`) is the central orchestrator for run lifecycle:
+
+**Run Lifecycle Hooks**:
+- `CreateRun`: Validates pipeline spec, creates workflow CR, applies plugin hooks (e.g., MLflow)
+- `ReportWorkflowResource`: Called by persistence-agent when workflow state changes; handles terminal state logic
+- `RetryRun`: Generates new workflow from failed run, reopens plugin resources
+
+**Plugin Integration Pattern**:
+Plugins integrate via lifecycle hooks without modifying core run logic:
+```go
+// Example pattern from MLflow integration
+func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model.Run, error) {
+    // 1. Parse plugin input from run.PluginsInputString
+    pluginInput := resolvePluginInput(run)
+
+    // 2. Generate workflow spec
+    executionSpec := tmpl.RunWorkflow(run, runWorkflowOptions)
+
+    // 3. Apply plugin hooks (e.g., create MLflow parent run, inject env vars)
+    r.applyPluginOnRunStart(ctx, run, namespace, pluginInput, executionSpec)
+
+    // 4. Create workflow CR
+    newExecSpec := r.getWorkflowClient(namespace).Create(ctx, executionSpec, ...)
+
+    // 5. Persist run with plugins_output
+    r.runStore.CreateRun(run)
+}
+```
+
+### Configuration Management
+
+**Two-Level Configuration Pattern** (used by plugins like MLflow):
+
+1. **Global Config** (API server YAML): Base configuration for all namespaces
+   ```yaml
+   plugins:
+     mlflow:
+       endpoint: "https://mlflow.example.com"
+       timeout: "30s"
+       settings:
+         authType: "kubernetes"
+         workspacesEnabled: true
+   ```
+
+2. **Namespace Config** (ConfigMap `kfp-launcher` in each namespace): Overrides global config
+   ```json
+   {
+     "endpoint": "https://mlflow-ns.example.com",
+     "settings": {
+       "authType": "bearer",
+       "credentialSecretRef": {"name": "mlflow-token"}
+     }
+   }
+   ```
+
+**Resolution Logic**:
+- Namespace config overrides global config (endpoint, timeout, TLS, settings)
+- If namespace overrides endpoint, it MUST provide its own credentials
+- See `resource_manager.go:resolveMLflowRequestConfig` for merge logic
+
+### Database Schema Management
+
+The backend uses **GORM** with auto-migration:
+- Schema changes happen automatically on first deployment with new model fields
+- Add fields to model structs in `backend/src/apiserver/model/`
+- Use `*LargeText` for nullable large text fields (e.g., `PluginsInputString`)
+- For complex migrations, use `backend/src/apiserver/storage/db.go:initDB()`
+
+**Important**: Fields in model structs use GORM tags:
+```go
+type RunDetails struct {
+    PluginsInputString  *LargeText `gorm:"column:PluginsInput; default:null;"`
+    PluginsOutputString *LargeText `gorm:"column:PluginsOutput; default:null;"`
+}
+```
+
+### Workflow Environment Variable Injection
+
+Driver and launcher need access to plugin runtime context (e.g., MLflow tracking URI). Use `SetEnvVarsToDriverAndLauncherTemplates`:
+
+```go
+// In CreateRun after executionSpec is generated
+envVars := map[string]string{
+    "KFP_MLFLOW_TRACKING_URI":  "https://mlflow.example.com",
+    "KFP_MLFLOW_PARENT_RUN_ID": "abc123",
+}
+executionSpec.SetEnvVarsToDriverAndLauncherTemplates(envVars)
+```
+
+**Template Identification**:
+- Driver templates: name contains "driver" (case-insensitive)
+- Launcher templates: name is "system-container-impl" OR has "kfp-launcher" init container
+
+### Plugin Output State Management
+
+Plugins track their own state separately from pipeline run state:
+
+```go
+// plugins_output.mlflow structure
+{
+  "entries": {
+    "experiment_id": {"value": "42"},
+    "run_url": {"value": "https://...", "content_type": "URL"}
+  },
+  "state": "SUCCEEDED",  // or "FAILED"
+  "state_message": ""    // Error details if state is FAILED
+}
+```
+
+**Key Pattern**: Plugin failures (e.g., MLflow server unreachable) don't fail the pipeline run. The run continues with `plugins_output.<plugin>.state = FAILED` and descriptive `state_message`.
+
+### Workflow Metrics Collection
+
+The persistence agent collects metrics from completed workflow nodes:
+
+**How it works**:
+1. Components output metrics to `mlpipeline-metrics` artifact (JSON file in tar.gz)
+2. Persistence agent reads artifact via `ReadArtifactRequest`
+3. Metrics are stored in `run_metrics` table with `RunUUID` and `NodeID`
+
+**Artifact reading pattern** (`workflow.go:CollectionMetrics`):
+```go
+// Used by persistence agent
+func (w *Workflow) CollectionMetrics(
+    readArtifact func(*artifactclient.ReadArtifactRequest) (*artifactclient.ReadArtifactResponse, error),
+) ([]*api.RunMetric, []error) {
+    for _, nodeStatus := range w.Status.Nodes {
+        artifactRequest := &artifactclient.ReadArtifactRequest{
+            RunID:        runID,
+            NodeID:       nodeStatus.ID,
+            ArtifactName: "mlpipeline-metrics",
+        }
+        artifactResponse, err := readArtifact(artifactRequest)
+        // Extract metrics from tar.gz, parse JSON, store in DB
+    }
+}
+```
+
+**Important**: `ReadArtifact` function signature changed from `api.ReadArtifactRequest` to `artifactclient.ReadArtifactRequest` (field names changed from `RunId/NodeId` to `RunID/NodeID`).
+
 ## Common Commands
 
 ### Quick Commands (using `just`)
@@ -241,6 +385,31 @@ PRs must follow [Conventional Commits](https://www.conventionalcommits.org/):
 - SDK: pytest with fixtures
 - Frontend: Jest + React Testing Library
 
+**Backend Unit Test Pattern**:
+```go
+func TestWorkflow_SetEnvVarsToDriverAndLauncherTemplates(t *testing.T) {
+    workflow := NewWorkflow(&workflowapi.Workflow{
+        Spec: workflowapi.WorkflowSpec{
+            Templates: []workflowapi.Template{
+                {Name: "system-dag-driver", Container: &corev1.Container{}},
+                {Name: "system-container-impl", Container: &corev1.Container{}},
+                {Name: "user-template", Container: &corev1.Container{}},
+            },
+        },
+    })
+
+    workflow.SetEnvVarsToDriverAndLauncherTemplates(map[string]string{
+        "KFP_VAR": "value",
+    })
+
+    // Assert driver and launcher have env var
+    assert.Contains(t, workflow.Spec.Templates[0].Container.Env,
+        corev1.EnvVar{Name: "KFP_VAR", Value: "value"})
+    // Assert user template unchanged
+    assert.Empty(t, workflow.Spec.Templates[2].Container.Env)
+}
+```
+
 **Integration Tests**:
 - Located in `backend/test/v2/integration/`
 - Require running API server (local or Kind cluster)
@@ -250,6 +419,26 @@ PRs must follow [Conventional Commits](https://www.conventionalcommits.org/):
 - Located in `test/`
 - Deploy full KFP stack in Kind cluster
 - Test complete pipeline execution workflows
+
+**Testing ResourceManager Changes**:
+
+When adding new ResourceManager methods or modifying run lifecycle:
+
+1. Mock dependencies (k8s client, storage):
+   ```go
+   clientSet := k8sfake.NewSimpleClientset()
+   fakeKubeClient := &fakeKubernetesCoreClientWithClientSet{clientSet: clientSet}
+   resourceManager := NewResourceManager(
+       fakeKubeClient,
+       &FakePipelineStore{},
+       &FakeRunStore{},
+       // ... other mocks
+   )
+   ```
+
+2. Test both success and failure paths
+3. Verify plugin outputs are persisted correctly
+4. Check that errors are gracefully handled (warnings logged, run continues)
 
 ## Code Style Guidelines
 
@@ -302,15 +491,114 @@ From `.github/copilot-instructions.md`, code should adhere to:
 ## Important File Locations
 
 - Backend API server: `backend/src/apiserver/`
+  - Resource Manager: `backend/src/apiserver/resource/resource_manager.go` (run lifecycle orchestration)
+  - Storage layer: `backend/src/apiserver/storage/` (DB operations)
+  - Model definitions: `backend/src/apiserver/model/` (GORM models)
 - Backend v2 runtime: `backend/src/v2/`
 - Frontend React app: `frontend/src/`
 - Frontend server: `frontend/server/`
 - SDK: `sdk/python/kfp/`
-- API protos: `api/v2alpha1/`
+- API protos: `api/v2alpha1/` and `backend/api/v2beta1/`
 - Kubernetes platform: `kubernetes_platform/`
 - Manifests: `manifests/kustomize/`
 - Tests: `test/`, `backend/test/`
 - CI workflows: `.github/workflows/`
+- Design proposals: `proposals/` (KEP documents for major features)
+
+## Common Development Patterns
+
+### Adding Plugin Input Validation
+
+When adding new plugin input schemas:
+
+1. Define struct with JSON tags (use `omitempty` for optional fields):
+   ```go
+   type MyPluginInput struct {
+       Field1 string `json:"field1,omitempty"`
+       Field2 int    `json:"field2,omitempty"`
+   }
+   ```
+
+2. Use `decoder.DisallowUnknownFields()` for strict validation:
+   ```go
+   decoder := json.NewDecoder(bytes.NewReader(rawJSON))
+   decoder.DisallowUnknownFields()
+   input := &MyPluginInput{}
+   if err := decoder.Decode(input); err != nil {
+       return nil, util.NewInvalidInputError("invalid plugin input: %v", err)
+   }
+   ```
+
+3. Validate no trailing JSON data:
+   ```go
+   var trailing json.RawMessage
+   if err := decoder.Decode(&trailing); err != io.EOF {
+       return nil, util.NewInvalidInputError("plugin input must be a single JSON object")
+   }
+   ```
+
+### Handling Nullable Database Fields
+
+Use pointers for nullable fields in GORM models:
+
+```go
+// Model definition
+type RunDetails struct {
+    PluginsInputString  *LargeText `gorm:"column:PluginsInput; default:null;"`
+    PluginsOutputString *LargeText `gorm:"column:PluginsOutput; default:null;"`
+}
+
+// In storage layer (run_store.go)
+var pluginsInput sql.NullString
+rows.Scan(&uuid, &displayName, ..., &pluginsInput, ...)
+
+if pluginsInput.Valid {
+    lt := model.LargeText(pluginsInput.String)
+    run.PluginsInputString = &lt
+}
+
+// When persisting
+SetMap(sq.Eq{
+    "PluginsInput": largeTextToNullableSQL(run.PluginsInputString),
+})
+```
+
+### Error Handling in ResourceManager
+
+Follow the graceful degradation pattern for non-critical features:
+
+```go
+// Example: Plugin failures shouldn't block run creation
+pluginOutput, pluginErr := handler.OnRunStart(ctx, run, namespace)
+if pluginErr != nil {
+    glog.Warningf("Plugin OnRunStart failed (run creation will continue): %v", pluginErr)
+}
+if pluginOutput != nil {
+    if err := UpsertRunPluginOutput(run, "plugin-name", pluginOutput); err != nil {
+        glog.Warningf("Failed to persist plugin output: %v", err)
+    }
+}
+// Continue with run creation regardless of plugin errors
+```
+
+### Reading Kubernetes Resources
+
+When reading ConfigMaps or Secrets in ResourceManager:
+
+```go
+clientSet := r.k8sCoreClient.GetClientSet()
+if clientSet == nil {
+    return nil, util.NewInternalServerError(errors.New("clientset is nil"), "...")
+}
+
+cm, err := clientSet.CoreV1().ConfigMaps(namespace).Get(ctx, name, v1.GetOptions{})
+if err != nil {
+    if apierrors.IsNotFound(err) {
+        return nil, nil  // Not found is OK for optional resources
+    }
+    return nil, util.NewInternalServerError(err, "failed to read configmap")
+}
+```
 
 ## Local Development Tips
 

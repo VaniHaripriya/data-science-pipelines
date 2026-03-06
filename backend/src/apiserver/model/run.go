@@ -319,8 +319,12 @@ type RunDetails struct {
 	State               RuntimeState     `gorm:"column:State; default:null;"`
 	StateHistoryString  LargeText        `gorm:"column:StateHistory; default:null;"`
 	StateHistory        []*RuntimeStatus `gorm:"-;"`
-	PluginsInputString  *LargeText       `gorm:"column:PluginsInput; default:null;"`
-	PluginsOutputString *LargeText       `gorm:"column:PluginsOutput; default:null;"`
+	// PluginsInputString is set at run creation and is immutable afterwards.
+	// It stores the user-provided plugins_input JSON (e.g. MLflow experiment name).
+	PluginsInputString *LargeText `gorm:"column:PluginsInput; default:null;"`
+	// PluginsOutputString is updated by plugin handlers (e.g. MLflow terminal
+	// sync, retry). In UpdateRun, a nil pointer means "leave unchanged".
+	PluginsOutputString *LargeText `gorm:"column:PluginsOutput; default:null;"`
 	// Serialized runtime details of a run in v2beta1
 	PipelineRuntimeManifest LargeText `gorm:"column:PipelineRuntimeManifest; not null;"`
 	// Serialized Argo CRD in v1beta1

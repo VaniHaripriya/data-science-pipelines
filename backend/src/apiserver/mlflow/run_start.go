@@ -24,8 +24,7 @@ const (
 	TagKFPPipelineVersionID      = "kfp.pipeline_version_id"
 	EntryExperimentName          = "experiment_name"
 	EntryExperimentID            = "experiment_id"
-	EntryRunID                   = "run_id"
-	EntryRootRunID               = "root_run_id"
+	EntryRootRunID = "root_run_id"
 	EntryRunURL                  = "run_url"
 )
 
@@ -87,14 +86,21 @@ func CreateParentRun(ctx context.Context, requestCtx *RequestContext, experiment
 	return requestCtx.Client.CreateRun(ctx, experimentID, runDisplayName, nil)
 }
 
-func BuildKFPRunURL(runID string) string {
+// BuildKFPRunURL constructs the KFP pipeline run URL. When kfpBaseURL is
+// non-empty the result is an absolute URL; otherwise a relative path is
+// returned (compatible with in-cluster UI links).
+func BuildKFPRunURL(kfpBaseURL, runID string) string {
 	if runID == "" {
 		return ""
 	}
-	return fmt.Sprintf("/#/runs/details/%s", runID)
+	relPath := fmt.Sprintf("/#/runs/details/%s", runID)
+	if kfpBaseURL == "" {
+		return relPath
+	}
+	return stringsTrimRightSlash(kfpBaseURL) + relPath
 }
 
-func TagRunWithKFPMetadata(ctx context.Context, requestCtx *RequestContext, mlflowRunID string, run *model.Run) error {
+func TagRunWithKFPMetadata(ctx context.Context, requestCtx *RequestContext, mlflowRunID string, run *model.Run, kfpBaseURL string) error {
 	if run == nil {
 		return util.NewInvalidInputError("run cannot be nil")
 	}
@@ -103,7 +109,7 @@ func TagRunWithKFPMetadata(ctx context.Context, requestCtx *RequestContext, mlfl
 	}
 	tags := []commonmlflow.Tag{
 		{Key: TagKFPRunID, Value: run.UUID},
-		{Key: TagKFPRunURL, Value: BuildKFPRunURL(run.UUID)},
+		{Key: TagKFPRunURL, Value: BuildKFPRunURL(kfpBaseURL, run.UUID)},
 	}
 	if run.PipelineSpec.PipelineId != "" {
 		tags = append(tags, commonmlflow.Tag{Key: TagKFPPipelineID, Value: run.PipelineSpec.PipelineId})
@@ -197,10 +203,6 @@ func GetStringEntry(output *apiv2beta1.PluginOutput, key string) string {
 }
 
 func GetParentRunID(output *apiv2beta1.PluginOutput) string {
-	runID := GetStringEntry(output, EntryRunID)
-	if runID != "" {
-		return runID
-	}
 	return GetStringEntry(output, EntryRootRunID)
 }
 
@@ -222,6 +224,10 @@ func ResolveExperimentDescription(explicit *string) *string {
 	}
 	return explicit
 }
+
+// maxSearchPages caps the number of SearchRuns pagination requests to prevent
+// infinite loops in case of server bugs. 100 pages × 1000 results = 100k runs.
+const maxSearchPages = 100
 
 func SyncParentAndNestedRuns(ctx context.Context, requestCtx *RequestContext, parentRunID, experimentID string, mode RunSyncMode, terminalStatus string, endTimeMs *int64) []string {
 	if requestCtx == nil || requestCtx.Client == nil {
@@ -251,26 +257,34 @@ func SyncParentAndNestedRuns(ctx context.Context, requestCtx *RequestContext, pa
 		return syncErrors
 	}
 	filter := fmt.Sprintf("tags.mlflow.parentRunId = '%s'", parentRunID)
-	searchResp, err := requestCtx.Client.SearchRuns(ctx, []string{experimentID}, filter, 1000, "")
-	if err != nil {
-		return append(syncErrors, fmt.Sprintf("failed to search nested runs: %v", err))
-	}
-	for _, runPayload := range searchResp.Runs {
-		mlflowRun := &searchRunPayload{}
-		if err := json.Unmarshal(runPayload, mlflowRun); err != nil {
-			syncErrors = append(syncErrors, fmt.Sprintf("failed to decode nested run payload: %v", err))
-			continue
+	pageToken := ""
+	for page := 0; page < maxSearchPages; page++ {
+		searchResp, err := requestCtx.Client.SearchRuns(ctx, []string{experimentID}, filter, 1000, pageToken)
+		if err != nil {
+			syncErrors = append(syncErrors, fmt.Sprintf("failed to search nested runs: %v", err))
+			break
 		}
-		nestedRunID := mlflowRun.Info.RunID
-		if nestedRunID == "" {
-			nestedRunID = mlflowRun.Info.RunUUID
+		for _, runPayload := range searchResp.Runs {
+			mlflowRun := &searchRunPayload{}
+			if err := json.Unmarshal(runPayload, mlflowRun); err != nil {
+				syncErrors = append(syncErrors, fmt.Sprintf("failed to decode nested run payload: %v", err))
+				continue
+			}
+			nestedRunID := mlflowRun.Info.RunID
+			if nestedRunID == "" {
+				nestedRunID = mlflowRun.Info.RunUUID
+			}
+			if nestedRunID == "" || nestedRunID == parentRunID || !shouldSyncNestedRun(mode, mlflowRun.Info.Status) {
+				continue
+			}
+			if err := requestCtx.Client.UpdateRun(ctx, nestedRunID, targetStatus, endTimeMs); err != nil {
+				syncErrors = append(syncErrors, fmt.Sprintf("failed to %s %s: %v", nestedAction, nestedRunID, err))
+			}
 		}
-		if nestedRunID == "" || nestedRunID == parentRunID || !shouldSyncNestedRun(mode, mlflowRun.Info.Status) {
-			continue
+		if searchResp.NextPageToken == "" {
+			break
 		}
-		if err := requestCtx.Client.UpdateRun(ctx, nestedRunID, targetStatus, endTimeMs); err != nil {
-			syncErrors = append(syncErrors, fmt.Sprintf("failed to %s %s: %v", nestedAction, nestedRunID, err))
-		}
+		pageToken = searchResp.NextPageToken
 	}
 	return syncErrors
 }
@@ -284,7 +298,6 @@ func buildPluginOutput(experimentID, experimentName, runID, runURL string, state
 		entries[EntryExperimentID] = &apiv2beta1.MetadataValue{Value: structpb.NewStringValue(experimentID)}
 	}
 	if runID != "" {
-		entries[EntryRunID] = &apiv2beta1.MetadataValue{Value: structpb.NewStringValue(runID)}
 		entries[EntryRootRunID] = &apiv2beta1.MetadataValue{Value: structpb.NewStringValue(runID)}
 	}
 	if runURL != "" {
