@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # 1. Build api server application
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.25.7-bookworm AS builder
 RUN apt-get update && apt-get install -y cmake clang musl-dev openssl
 WORKDIR /go/src/github.com/kubeflow/pipelines
 
@@ -39,7 +39,9 @@ RUN echo "Building for architecture: ${TARGETARCH}"
 
 # Downloading Argo CLI so that the samples are validated
 ENV ARGO_VERSION=v3.7.3
-RUN curl -sLO https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-$TARGETARCH.gz && \
+RUN curl -sL -H "Accept: application/octet-stream" \
+        https://github.com/argoproj/argo-workflows/releases/download/${ARGO_VERSION}/argo-linux-$TARGETARCH.gz \
+    -o argo-linux-$TARGETARCH.gz && \
     gunzip argo-linux-$TARGETARCH.gz && \
     chmod +x argo-linux-$TARGETARCH && \
     mv ./argo-linux-$TARGETARCH /usr/local/bin/argo

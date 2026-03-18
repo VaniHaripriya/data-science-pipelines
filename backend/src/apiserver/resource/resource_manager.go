@@ -22,7 +22,9 @@ import (
 	"net"
 	"reflect"
 	"strconv"
+	"time"
 
+	apiv2beta1 "github.com/kubeflow/pipelines/backend/api/v2beta1/go_client"
 	scheduledworkflow "github.com/kubeflow/pipelines/backend/src/crd/pkg/apis/scheduledworkflow/v1beta1"
 
 	"github.com/cenkalti/backoff"
@@ -32,6 +34,7 @@ import (
 	"github.com/kubeflow/pipelines/backend/src/apiserver/client"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/list"
+	apiservermlflow "github.com/kubeflow/pipelines/backend/src/apiserver/mlflow"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/model"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/storage"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/template"
@@ -77,6 +80,20 @@ var (
 		Name: "resource_manager_workflow_runs_failed",
 		Help: "The current number of failed workflow runs",
 	}, extraLabels)
+
+	// Gap in seconds between creating an execution spec (Argo or other backend) for a recurring run and reporting it via the persistence agent.
+	recurringPipelineRunReportGap = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "resource_manager_recurring_run_report_gap",
+		Help:    "Recurring Run Report Delay",
+		Buckets: prometheus.ExponentialBuckets(0.5, 2, 10), // 0.5s -> 4min
+	})
+
+	// Map API enum values to Kubernetes DeletionPropagation values
+	propagationPolicyMap = map[apiv2beta1.DeletePropagationPolicy]v1.DeletionPropagation{
+		apiv2beta1.DeletePropagationPolicy_FOREGROUND: v1.DeletePropagationForeground,
+		apiv2beta1.DeletePropagationPolicy_BACKGROUND: v1.DeletePropagationBackground,
+		apiv2beta1.DeletePropagationPolicy_ORPHAN:     v1.DeletePropagationOrphan,
+	}
 )
 
 type ClientManagerInterface interface {
@@ -105,6 +122,9 @@ type ResourceManagerOptions struct {
 	CacheDisabled        bool                              `json:"cache_disabled,omitempty"`
 	DefaultWorkspace     *corev1.PersistentVolumeClaimSpec `json:"default_workspace,omitempty"`
 	MLPipelineTLSEnabled bool                              `json:"ml_pipeline_tls_enabled,omitempty"`
+	DefaultRunAsUser     *int64                            `json:"default_run_as_user,omitempty"`
+	DefaultRunAsGroup    *int64                            `json:"default_run_as_group,omitempty"`
+	DefaultRunAsNonRoot  *bool                             `json:"default_run_as_non_root,omitempty"`
 }
 
 type ResourceManager struct {
@@ -407,6 +427,9 @@ func (r *ResourceManager) CreatePipelineAndPipelineVersion(p *model.Pipeline, pv
 		CacheDisabled:        r.options.CacheDisabled,
 		DefaultWorkspace:     r.options.DefaultWorkspace,
 		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:     r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {
@@ -519,6 +542,21 @@ func (r *ResourceManager) GetPipelineLatestTemplate(pipelineId string) ([]byte, 
 // Manifest's namespace gets overwritten with the run.Namespace.
 // Creating a run from recurring run prioritizes recurring run's pipeline spec over the run's one.
 func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model.Run, error) {
+	mlflowInput, err := apiservermlflow.ResolveMLflowPluginInput((*string)(run.PluginsInputString))
+	if err != nil {
+		return nil, util.NewBadRequestError(err, "Failed to create a run due to invalid MLflow plugin input")
+	}
+	if mlflowInput.Disabled {
+		glog.Infof("MLflow is disabled for this run; skipping MLflow-specific create-run behavior")
+	} else {
+		selectedExperimentID, selectedExperimentName := apiservermlflow.SelectMLflowExperiment(mlflowInput)
+		if selectedExperimentID != "" {
+			glog.Infof("Resolved MLflow experiment selector for run creation: experiment_id=%q (create-by-name skipped)", selectedExperimentID)
+		} else {
+			glog.Infof("Resolved MLflow experiment selector for run creation: experiment_name=%q", selectedExperimentName)
+		}
+	}
+
 	// Create a template based on the manifest of an existing pipeline version or used-provided manifest.
 	// Update the run.PipelineSpec if an existing pipeline version is used.
 	tmpl, manifest, err := r.fetchTemplateFromPipelineSpec(&run.PipelineSpec)
@@ -575,6 +613,11 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 		executionSpec.SetOwnerReferences(swf)
 	}
 
+	// Apply MLflow plugin if enabled
+	if mlflowInput != nil && !mlflowInput.Disabled {
+		r.applyMLflowOnRunStart(ctx, run, k8sNamespace, mlflowInput, executionSpec)
+	}
+
 	newExecSpec, err := r.getWorkflowClient(k8sNamespace).Create(ctx, executionSpec, v1.CreateOptions{})
 	if err != nil {
 		if err, ok := err.(net.Error); ok && err.Timeout() {
@@ -604,6 +647,7 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 		run.RunDetails.ScheduledAtInSec = run.RunDetails.CreatedAtInSec
 	}
 	run.State = model.RuntimeStatePending
+
 	newRun, err := r.runStore.CreateRun(run)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create a run")
@@ -618,11 +662,87 @@ func (r *ResourceManager) CreateRun(ctx context.Context, run *model.Run) (*model
 	return newRun, nil
 }
 
+// mlflowHandlerDeps returns the dependencies needed by the MLflow handler.
+func (r *ResourceManager) mlflowHandlerDeps() apiservermlflow.HandlerDeps {
+	return apiservermlflow.HandlerDeps{
+		KubeClients: r.k8sCoreClient,
+	}
+}
+
+func (r *ResourceManager) applyMLflowOnRunStart(ctx context.Context, run *model.Run, namespace string, input *apiservermlflow.PluginInput, executionSpec util.ExecutionSpec) {
+	resolvedCfg, err := apiservermlflow.ResolveMLflowRequestConfig(ctx, r.k8sCoreClient, namespace)
+	if err != nil {
+		glog.Warningf("MLflow config resolution failed for run %q: %v", run.UUID, err)
+		return
+	}
+	if resolvedCfg == nil {
+		return
+	}
+
+	handler := apiservermlflow.NewHandler(r.mlflowHandlerDeps(), input, namespace)
+	apiRun := apiservermlflow.ModelToPluginRun(run)
+	pluginOutput, pluginErr := handler.OnRunStart(ctx, apiRun, resolvedCfg.Config)
+	if pluginErr != nil {
+		glog.Warningf("MLflow OnRunStart failed for run %q (run creation will continue): %v", run.UUID, pluginErr)
+	}
+	if pluginOutput == nil {
+		return
+	}
+	if err := apiservermlflow.SetMLflowPluginOutput(run, apiservermlflow.PluginName, pluginOutput); err != nil {
+		glog.Warningf("Failed to persist MLflow plugin output for run %q: %v", run.UUID, err)
+	}
+	if len(handler.RunStartEnv) != 0 {
+		if err := apiservermlflow.InjectMLflowRuntimeEnv(executionSpec, handler.RunStartEnv, handler.MLflowEnabled); err != nil {
+			glog.Warningf("Failed to inject MLflow runtime env for run %q: %v", run.UUID, err)
+		}
+	}
+}
+
+func (r *ResourceManager) applyMLflowOnRunEnd(ctx context.Context, run *model.Run, namespace string) {
+	r.applyMLflowPostAction(ctx, run, namespace, "OnRunEnd", func(h *apiservermlflow.Handler, apiRun *apiv2beta1.Run, cfg *apiservermlflow.PluginConfig) {
+		if err := h.OnRunEnd(ctx, apiRun, cfg); err != nil {
+			glog.Warningf("MLflow OnRunEnd failed for run %q: %v", run.UUID, err)
+		}
+	})
+}
+
+func (r *ResourceManager) applyMLflowOnRunRetry(ctx context.Context, run *model.Run, namespace string) {
+	r.applyMLflowPostAction(ctx, run, namespace, "HandleRetry", func(h *apiservermlflow.Handler, apiRun *apiv2beta1.Run, cfg *apiservermlflow.PluginConfig) {
+		h.HandleRetry(ctx, apiRun, cfg)
+	})
+}
+
+// applyMLflowPostAction handles the common setup and teardown for OnRunEnd and HandleRetry.
+func (r *ResourceManager) applyMLflowPostAction(
+	ctx context.Context,
+	run *model.Run,
+	namespace string,
+	action string,
+	invoke func(*apiservermlflow.Handler, *apiv2beta1.Run, *apiservermlflow.PluginConfig),
+) {
+	resolvedCfg, _ := apiservermlflow.ResolveMLflowRequestConfig(ctx, r.k8sCoreClient, namespace)
+
+	handler := apiservermlflow.NewHandler(r.mlflowHandlerDeps(), nil, namespace)
+	apiRun := apiservermlflow.ModelToPluginRun(run)
+
+	var config *apiservermlflow.PluginConfig
+	if resolvedCfg != nil {
+		config = resolvedCfg.Config
+	}
+	invoke(handler, apiRun, config)
+
+	if err := apiservermlflow.SyncPluginOutputToModel(apiRun, run); err != nil {
+		glog.Warningf("MLflow %s: failed to sync plugin output to model for run %q: %v", action, run.UUID, err)
+		return
+	}
+	if err := r.runStore.UpdateRunPluginsOutput(run.UUID, run.PluginsOutputString); err != nil {
+		glog.Warningf("MLflow %s: failed to persist plugin output for run %q: %v", action, run.UUID, err)
+	}
+}
+
 // ReconcileSwfCrs reconciles the ScheduledWorkflow CRs based on existing jobs.
 func (r *ResourceManager) ReconcileSwfCrs(ctx context.Context) error {
-	filterContext := &model.FilterContext{
-		ReferenceKey: &model.ReferenceKey{Type: model.NamespaceResourceType, ID: common.GetPodNamespace()},
-	}
+	filterContext := model.EmptyFilterContext()
 
 	opts := list.EmptyOptions()
 
@@ -953,8 +1073,25 @@ func (r *ResourceManager) RetryRun(ctx context.Context, runId string) error {
 		}
 		newExecSpec = newCreatedWorkflow
 	}
+	// Notify MLflow plugin of retry
+	if run.PluginsOutputString != nil && *run.PluginsOutputString != "" {
+		r.applyMLflowOnRunRetry(ctx, run, namespace)
+	}
+
 	condition := string(newExecSpec.ExecutionStatus().Condition())
-	err = r.runStore.UpdateRun(&model.Run{UUID: runId, RunDetails: model.RunDetails{Conditions: condition, FinishedAtInSec: 0, WorkflowRuntimeManifest: model.LargeText(newExecSpec.ToStringForStore()), State: model.RuntimeState(condition).ToV2()}})
+	// PluginsOutputString is intentionally omitted here: HandleRetry
+	// persists it independently via UpdateRunPluginsOutput so that
+	// MLflow state changes are committed even if this UpdateRun call
+	// is modified in the future.
+	err = r.runStore.UpdateRun(&model.Run{
+		UUID: runId,
+		RunDetails: model.RunDetails{
+			Conditions:              condition,
+			FinishedAtInSec:         0,
+			WorkflowRuntimeManifest: model.LargeText(newExecSpec.ToStringForStore()),
+			State:                   model.RuntimeState(condition).ToV2(),
+		},
+	})
 	if err != nil {
 		return util.NewInternalServerError(err, "Failed to retry run %s due to error updating entry", runId)
 	}
@@ -1139,8 +1276,12 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		}
 
 		templateOptions := template.TemplateOptions{
-			CacheDisabled:    r.options.CacheDisabled,
-			DefaultWorkspace: r.options.DefaultWorkspace,
+			CacheDisabled:        r.options.CacheDisabled,
+			DefaultWorkspace:     r.options.DefaultWorkspace,
+			MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+			DefaultRunAsUser:     r.options.DefaultRunAsUser,
+			DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+			DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 		}
 		tmpl, err := template.New(manifest, templateOptions)
 		if err != nil {
@@ -1165,6 +1306,14 @@ func (r *ResourceManager) CreateJob(ctx context.Context, job *model.Job) (*model
 		scheduledWorkflow.Spec.Workflow = &scheduledworkflow.WorkflowResource{
 			Parameters: parameters, PipelineRoot: string(job.PipelineRoot),
 		}
+	}
+
+	// When PluginsInput is set on the SWF spec, clear Workflow.Spec so the
+	// controller takes the CreateRun API path instead of directly creating a
+	// workflow.  This ensures each triggered run flows through the standard
+	// plugin integration logic (e.g. MLflow parent run creation).
+	if scheduledWorkflow.Spec.PluginsInput != "" && scheduledWorkflow.Spec.Workflow != nil {
+		scheduledWorkflow.Spec.Workflow.Spec = nil
 	}
 
 	newScheduledWorkflow, err := r.getScheduledWorkflowClient(k8sNamespace).Create(ctx, scheduledWorkflow)
@@ -1243,38 +1392,44 @@ func (r *ResourceManager) ChangeJobMode(ctx context.Context, jobId string, enabl
 }
 
 // Deletes a recurring run with given id.
-func (r *ResourceManager) DeleteJob(ctx context.Context, jobId string) error {
-	job, err := r.GetJob(jobId)
+func (r *ResourceManager) DeleteJob(ctx context.Context, jobID string, propagationPolicy apiv2beta1.DeletePropagationPolicy) error {
+	job, err := r.GetJob(jobID)
 	if err != nil {
-		return util.Wrapf(err, "Failed to delete recurring run %v. Check if exists", jobId)
+		return util.Wrapf(err, "Failed to delete recurring run %v. Check if exists", jobID)
 	}
 
 	k8sNamespace := job.Namespace
 	if k8sNamespace == "" {
 		k8sNamespace = common.GetPodNamespace()
 	}
-	err = r.getScheduledWorkflowClient(k8sNamespace).Delete(ctx, job.K8SName, &v1.DeleteOptions{})
+
+	deleteOptions := &v1.DeleteOptions{}
+	if policy, exists := propagationPolicyMap[propagationPolicy]; exists {
+		deleteOptions.PropagationPolicy = &policy
+	}
+
+	err = r.getScheduledWorkflowClient(k8sNamespace).Delete(ctx, job.K8SName, deleteOptions)
 	if err != nil {
 		if !util.IsNotFound(err) {
-			return util.NewInternalServerError(err, "Failed to delete recurring run %v. Check if the scheduled workflow exists", jobId)
+			return util.NewInternalServerError(err, "Failed to delete recurring run %v. Check if the scheduled workflow exists", jobID)
 		}
 		// The ScheduledWorkflow was not found.
-		glog.Infof("Deleting recurring run '%v', but skipped deleting ScheduledWorkflow '%v' in namespace '%v' (k8s namespace %v) because it was not found", jobId, job.K8SName, job.Namespace, k8sNamespace)
+		glog.Infof("Deleting recurring run '%v', but skipped deleting ScheduledWorkflow '%v' in namespace '%v' (k8s namespace %v) because it was not found", jobID, job.K8SName, job.Namespace, k8sNamespace)
 		// Continue the execution, because we want to delete the
 		// ScheduledWorkflow. We can skip deleting the ScheduledWorkflow
 		// when it no longer exists.
 	}
-	err = r.jobStore.DeleteJob(jobId)
+	err = r.jobStore.DeleteJob(jobID)
 	if err != nil {
-		return util.Wrapf(err, "Failed to delete recurring run %v", jobId)
+		return util.Wrapf(err, "Failed to delete recurring run %v", jobID)
 	}
 	return nil
 }
 
 // Creates new tasks or updates existing ones.
 // This is not a part of internal API exposed to persistence agent only.
-func (r *ResourceManager) CreateOrUpdateTasks(t []*model.Task) ([]*model.Task, error) {
-	tasks, err := r.taskStore.CreateOrUpdateTasks(t)
+func (r *ResourceManager) CreateOrUpdateTasks(t []*model.Task, runID string) ([]*model.Task, error) {
+	tasks, err := r.taskStore.CreateOrUpdateTasks(t, runID)
 	if err != nil {
 		return nil, util.Wrap(err, "Failed to create or update tasks")
 	}
@@ -1423,6 +1578,10 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 			},
 		}
 		run, err = r.runStore.CreateRun(run)
+		if r.options.CollectMetrics && !execStatus.StartedAtTime().Time.IsZero() {
+			reportGap := time.Since(execStatus.StartedAtTime().Time).Seconds()
+			recurringPipelineRunReportGap.Observe(reportGap)
+		}
 		if err != nil {
 			return nil, util.Wrapf(err, "Failed to report a workflow due to error creating run %s", runId)
 		} else {
@@ -1434,6 +1593,11 @@ func (r *ResourceManager) ReportWorkflowResource(ctx context.Context, execSpec u
 		}
 	}
 	if execStatus.IsInFinalState() {
+		// Notify MLflow plugin of terminal state
+		if run != nil && run.PluginsOutputString != nil && *run.PluginsOutputString != "" {
+			r.applyMLflowOnRunEnd(ctx, run, execSpec.ExecutionNamespace())
+		}
+
 		err := addWorkflowLabel(ctx, r.getWorkflowClient(execSpec.ExecutionNamespace()), execSpec.ExecutionName(), util.LabelKeyWorkflowPersistedFinalState, "true")
 		if err != nil {
 			message := fmt.Sprintf("Failed to add PersistedFinalState label to workflow %s", execSpec.ExecutionName())
@@ -1529,8 +1693,12 @@ func (r *ResourceManager) fetchTemplateFromPipelineSpec(pipelineSpec *model.Pipe
 		}
 	}
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:    r.options.CacheDisabled,
-		DefaultWorkspace: r.options.DefaultWorkspace,
+		CacheDisabled:        r.options.CacheDisabled,
+		DefaultWorkspace:     r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:     r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 	}
 	tmpl, err := template.New([]byte(manifest), templateOptions)
 	if err != nil {
@@ -1716,8 +1884,12 @@ func (r *ResourceManager) CreatePipelineVersion(pv *model.PipelineVersion) (*mod
 
 	// Create a template
 	templateOptions := template.TemplateOptions{
-		CacheDisabled:    r.options.CacheDisabled,
-		DefaultWorkspace: r.options.DefaultWorkspace,
+		CacheDisabled:        r.options.CacheDisabled,
+		DefaultWorkspace:     r.options.DefaultWorkspace,
+		MLPipelineTLSEnabled: r.options.MLPipelineTLSEnabled,
+		DefaultRunAsUser:     r.options.DefaultRunAsUser,
+		DefaultRunAsGroup:    r.options.DefaultRunAsGroup,
+		DefaultRunAsNonRoot:  r.options.DefaultRunAsNonRoot,
 	}
 	tmpl, err := template.New(pipelineSpecBytes, templateOptions)
 	if err != nil {

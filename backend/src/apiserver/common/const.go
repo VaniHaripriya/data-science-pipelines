@@ -68,8 +68,8 @@ const (
 )
 
 const (
-	TLSCertCAPath = "/kfp/certs/ca.crt"
-	CABundleDir   = "/kfp/certs"
+	CustomCaCertPath = "/kfp/certs/ca.crt"
+	CABundleDir      = "/kfp/certs"
 )
 
 const (
@@ -79,4 +79,12 @@ const (
 const (
 	DefaultMLPipelineServiceName string = "ml-pipeline"
 	DefaultMetadataServiceName   string = "metadata-grpc-service"
+	DefaultClusterDomain         string = "cluster.local"
+)
+
+const (
+	DefaultPluginMaxKeys              = 16
+	DefaultPluginMaxPayloadBytes      = 64 * 1024
+	DefaultPluginMaxTotalPayloadBytes = 256 * 1024
+	DefaultPluginMaxNestingDepth      = 10
 )
