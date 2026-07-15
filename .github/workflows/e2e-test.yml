@@ -36,6 +36,8 @@ on:
       - 'test_data/sdk_compiled_pipelines/**'
       - '!**/*.md'
       - '!**/OWNERS'
+      # Keep proposal docs changes eligible for E2E dummy/validation PRs.
+      - 'proposals/**'
 
 
   workflow_dispatch:
@@ -65,6 +67,7 @@ jobs:
     uses: ./.github/workflows/image-builds.yml
 
   end-to-end-scenario-tests:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     needs: build
     strategy:
@@ -213,6 +216,7 @@ jobs:
           deployment_mode: ${{ steps.deploy.outputs.deployment_mode }}
 
   end-to-end-critical-scenario-multi-user-tests:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     needs: build
     strategy:
